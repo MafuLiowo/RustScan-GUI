@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <p align="center">
   <img src="assets/images/rsg-logo.png" alt="RustScan GUI" width="360" />
 </p>
