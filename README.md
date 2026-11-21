@@ -1,12 +1,13 @@
+<<<<<<< HEAD
 <p align="center">
   <img src="assets/images/rsg-logo.png" alt="RustScan GUI" width="360" />
 </p>
 
-# RustScan GUI
+# RustScan-GUI
 
 [English](README.md) | [简体中文](README_zh.md)
 
-A desktop graphical interface for RustScan built with **Python + PySide6 (Qt 6)**.
+A GUI for RustScan built with **Python + PySide6 (Qt 6)**.
 
 Current status: **project/scan directory management, scan execution, XML result viewing, English/Simplified Chinese switching, light/dark/follow-system themes and configuration persistence, script management, and script creation are complete**.
 

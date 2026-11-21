@@ -2,7 +2,7 @@
   <img src="assets/images/rsg-logo.png" alt="RustScan GUI" width="360" />
 </p>
 
-# RustScan GUI
+# RustScan-GUI
 
 [English](README.md) | [简体中文](README_zh.md)
 
