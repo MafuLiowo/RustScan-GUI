@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<language code="en" name="English">
+  <text key="menu.file">File</text>
+  <text key="menu.new_project">New Project</text>
+  <text key="menu.new_scan">New Scan</text>
+  <text key="menu.exit">Exit</text>
+  <text key="menu.edit">Edit</text>
+  <text key="menu.rename_selected">Rename Selected</text>
+  <text key="menu.refresh_projects">Refresh Project List</text>
+  <text key="menu.settings">Settings</text>
+  <text key="menu.main_interface">Main Interface</text>
+  <text key="menu.view">View</text>
+  <text key="menu.show_sidebar">Show Sidebar</text>
+  <text key="menu.scripts">Scripts</text>
+  <text key="menu.manage_scripts">Manage Scripts</text>
+  <text key="menu.add_script">Add Script</text>
+  <text key="menu.help">Help</text>
+  <text key="menu.about">About RustScan GUI</text>
+
+  <text key="sidebar.subtitle">Project Workspace</text>
+  <text key="sidebar.close_tooltip">Close sidebar (Ctrl+B)</text>
+  <text key="sidebar.section_projects">Projects</text>
+
+  <text key="scripts.manage_title">Manage Scripts</text>
+  <text key="scripts.description">Scripts stored in the script folder.</text>
+  <text key="scripts.select_hint">Select a script to view its content.</text>
+  <text key="scripts.empty">No scripts yet. Use Scripts &gt; Add Script to create one.</text>
+  <text key="scripts.read_failed">Could not read script: {error}</text>
+
+  <text key="welcome.title">Project Workspace</text>
+  <text key="welcome.description">Use the File menu to create a project or scan. Projects are stored in the project/ directory. Select a scan on the left to configure scan options and view XML results.</text>
+  <text key="environment.title">Environment Status</text>
+  <text key="environment.rustscan_missing">rustscan.exe not found</text>
+  <text key="environment.ready">Ready</text>
+  <text key="environment.missing">Missing</text>
+  <text key="environment.qt_bindings">Qt bindings</text>
+  <text key="environment.project_dir">Project folder</text>
+  <text key="environment.app_dir">Application folder</text>
+
+  <text key="scan.title">Scan</text>
+  <text key="scan.tab_options">Scan Options</text>
+  <text key="scan.tab_results">Scan Results</text>
+  <text key="scan.tab_logs">Logs</text>
+  <text key="scan.address_label">Scan address (CIDR, IP)</text>
+  <text key="scan.address_placeholder">For example: 192.168.1.0/24 or 127.0.0.1</text>
+  <text key="scan.exclude_ip_label">Add excluded IP addresses?</text>
+  <text key="scan.exclude_ip_placeholder">Excluded IP addresses</text>
+  <text key="scan.ports_title">Scan ports</text>
+  <text key="scan.port_mode_ports">Ports</text>
+  <text key="scan.port_mode_range">Range</text>
+  <text key="scan.ports_placeholder_ports">Ports (comma separated, e.g. 80,8080)</text>
+  <text key="scan.ports_placeholder_range">Range, e.g. 80-8080</text>
+  <text key="scan.exclude_ports_label">Add excluded ports?</text>
+  <text key="scan.exclude_ports_placeholder">Excluded ports (comma separated, e.g. 80,8080)</text>
+  <text key="scan.ignore_config_label">Ignore configuration file?</text>
+  <text key="scan.udp_label">Use UDP mode?</text>
+  <text key="scan.nmap_version_label">Use Nmap to scan version information?</text>
+  <text key="scan.nmap_extra_args_placeholder">Additional Nmap scan arguments</text>
+  <text key="scan.use_script_label">Use a script?</text>
+  <text key="scan.no_scripts_available">No scripts available in the script folder</text>
+  <text key="scan.tip">Results are saved in the current scan folder and displayed from XML files.</text>
+  <text key="scan.start">Start Scan</text>
+
+  <text key="results.file_label">Result file</text>
+  <text key="results.refresh">Refresh</text>
+  <text key="results.empty_hint">No scan results yet. Place an XML result file in this scan folder and click Refresh.</text>
+  <text key="results.parse_error">{filename} could not be parsed: {error}</text>
+  <text key="results.summary">{filename}  ·  Results: {count}</text>
+  <text key="results.summary_with_target">{filename}  ·  Target: {target}  ·  Results: {count}</text>
+  <text key="results.no_results_in_file">{filename} does not contain any displayable port results.</text>
+  <text key="results.column_address">Address</text>
+  <text key="results.column_port">Port</text>
+  <text key="results.column_protocol">Protocol</text>
+  <text key="results.column_state">State</text>
+  <text key="results.column_service">Service</text>
+  <text key="results.column_version">Version</text>
+
+  <text key="logs.description">Scan output and application events are appended here in real time.</text>
+  <text key="logs.placeholder">Runtime logs will appear here.</text>
+
+  <text key="context.new_scan">New Scan</text>
+  <text key="context.rename">Rename</text>
+  <text key="context.open_explorer">Open in Explorer</text>
+  <text key="context.delete">Delete</text>
+  <text key="common.yes">Yes</text>
+  <text key="common.no">No</text>
+
+  <text key="project.default_name">New Project</text>
+  <text key="scan.default_name">New Scan</text>
+
+  <text key="status.ready">Ready</text>
+  <text key="status.selected">Selected: {name}  ·  {path}</text>
+  <text key="status.load_failed">Failed to load projects: {error}</text>
+  <text key="status.project_created">Project created: {name}  ·  {path}</text>
+  <text key="status.scan_created">Created “{name}” in “{project}”</text>
+  <text key="status.renamed">Renamed: {old_name} → {new_name}</text>
+  <text key="status.deleted">Deleted: {name}</text>
+  <text key="status.script_added">Script added: {name}</text>
+  <text key="status.scanning">Scanning {target}…</text>
+  <text key="status.scan_failed_code">Scan failed (exit code {code})</text>
+  <text key="status.scan_no_scan_dir">Scan completed, but there is no scan folder for saving results.</text>
+  <text key="status.scan_save_failed">Scan completed, but saving the result failed.</text>
+  <text key="status.scan_completed">Scan completed: {count} open ports  ·  {path}</text>
+  <text key="status.scan_start_failed">Failed to start the scan</text>
+  <text key="status.language_changed">Language changed: {language}</text>
+  <text key="status.config_save_failed">Language changed, but config.ini could not be saved: {error}</text>
+  <text key="status.display_mode_changed">Display mode changed: {mode}</text>
+  <text key="status.display_config_save_failed">Display mode changed, but config.ini could not be saved: {error}</text>
+  <text key="status.nmap_path_saved">Nmap path saved: {path}</text>
+  <text key="status.nmap_config_save_failed">Nmap path changed, but config.ini could not be saved: {error}</text>
+  <text key="status.select_item_to_rename">Select a project or scan to rename first.</text>
+  <text key="log.application_started">Application started (v{version}).</text>
+  <text key="log.scan_command">RustScan command: {command}</text>
+  <text key="log.scan_info_save_failed">Could not save scan_info.xml: {error}</text>
+
+  <text key="dialog.new_project_failed">Failed to create project</text>
+  <text key="dialog.cannot_create_project">Could not create the project folder:
+{error}</text>
+  <text key="dialog.new_scan_title">New Scan</text>
+  <text key="dialog.select_project_first">Select a project on the left first.</text>
+  <text key="dialog.new_scan_failed">Failed to create scan</text>
+  <text key="dialog.cannot_create_scan">Could not create the scan folder:
+{error}</text>
+  <text key="dialog.cannot_start_scan">Could not start scan</text>
+  <text key="dialog.address_required">Enter a scan address.</text>
+  <text key="dialog.script_unavailable">The selected script is unavailable. Select a script from the script folder.</text>
+  <text key="dialog.rustscan_missing">rustscan.exe was not found. Make sure bin/rustscan.exe exists.</text>
+  <text key="dialog.cannot_access_scan_dir">Could not access the scan folder:
+{error}</text>
+  <text key="dialog.scan_failed">Scan failed</text>
+  <text key="dialog.scan_no_details">RustScan did not return any error details.</text>
+  <text key="dialog.scan_failed_detail">RustScan exit code: {code}
+
+{details}</text>
+  <text key="dialog.save_results_failed">Failed to save scan results</text>
+  <text key="dialog.cannot_write_scan_dir">Could not write to the scan folder:
+{error}</text>
+  <text key="dialog.scan_completed">Scan completed</text>
+  <text key="dialog.scan_completed_body">Target: {target}
+Open ports: {count}
+Result file: {path}</text>
+  <text key="dialog.scan_start_failed">Failed to start scan</text>
+  <text key="dialog.cannot_start_rustscan">Could not start RustScan:
+{error}</text>
+  <text key="dialog.rename">Rename</text>
+  <text key="dialog.new_name">New name:</text>
+  <text key="dialog.invalid_name">Invalid name</text>
+  <text key="dialog.invalid_name_message">The name is empty, contains invalid characters, is reserved by Windows, or is too long.</text>
+  <text key="dialog.name_conflict_message">A folder with that name already exists.</text>
+  <text key="dialog.rename_failed">Rename failed</text>
+  <text key="dialog.cannot_rename_folder">Could not rename the folder:
+{error}</text>
+  <text key="dialog.delete_title">Delete?</text>
+  <text key="dialog.delete_local_files">Also delete local files</text>
+  <text key="dialog.cancel">Cancel</text>
+  <text key="dialog.confirm">Confirm</text>
+  <text key="dialog.delete_failed">Delete failed</text>
+  <text key="dialog.cannot_delete_folder">Could not delete the folder:
+{error}</text>
+  <text key="dialog.open_failed">Open failed</text>
+  <text key="dialog.cannot_access_folder">Could not create or access the folder:
+{error}</text>
+  <text key="dialog.cannot_open_folder">Could not open the folder:
+{path}</text>
+  <text key="dialog.about_title">About RustScan GUI</text>
+  <text key="dialog.about_name">RustScan GUI</text>
+  <text key="dialog.about_description">Python + PySide6 desktop interface</text>
+  <text key="dialog.about_project">Project folder: {path}</text>
+  <text key="dialog.github_url">https://github.com/MafuLiowo</text>
+  <text key="dialog.ok">OK</text>
+  <text key="dialog.add_script_title">Add Script</text>
+  <text key="dialog.add_script_failed">Failed to add script</text>
+  <text key="dialog.script_name">Script name</text>
+  <text key="dialog.script_name_placeholder">For example: scan.nse</text>
+  <text key="dialog.script_content">Script content</text>
+  <text key="dialog.script_content_placeholder">Enter script content here.</text>
+  <text key="dialog.script_name_exists">A script with this name already exists.</text>
+  <text key="dialog.cannot_write_script">Could not write script file:
+{error}</text>
+
+  <text key="settings.title">Settings</text>
+  <text key="settings.subtitle">Configure the application.</text>
+  <text key="settings.nav_language">Language</text>
+  <text key="settings.nav_interface">Interface</text>
+  <text key="settings.nav_nmap">Nmap Support</text>
+  <text key="settings.language_title">Language Settings</text>
+  <text key="settings.language_description">Choose the language used by the interface. Changes take effect immediately.</text>
+  <text key="settings.language_label">Language</text>
+  <text key="settings.language_hint">The selected language is saved and restored the next time the application starts.</text>
+  <text key="settings.interface_title">Interface Settings</text>
+  <text key="settings.interface_description">Choose how the application looks.</text>
+  <text key="settings.display_mode_label">Display mode</text>
+  <text key="settings.display_mode_day">Day</text>
+  <text key="settings.display_mode_night">Night</text>
+  <text key="settings.display_mode_system">Follow System</text>
+  <text key="settings.display_mode_hint">Day uses a light interface, Night uses a dark interface, and Follow System automatically matches your operating system. Changes are applied immediately and saved automatically.</text>
+  <text key="settings.nmap_title">Nmap Support</text>
+  <text key="settings.nmap_description">Specify the Nmap executable used for service detection and script scans.</text>
+  <text key="settings.nmap_path_label">Nmap path</text>
+  <text key="settings.nmap_path_placeholder">For example: C:\Program Files (x86)\Nmap\nmap.exe</text>
+  <text key="settings.nmap_path_hint">The path is saved in config.ini and used for Nmap-based scans and scripts.</text>
+</language>
