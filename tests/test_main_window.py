@@ -637,7 +637,7 @@ class MainWindowProjectTests(unittest.TestCase):
 
         self.assertGreater(scrollbar.value(), before)
 
-    def test_boolean_options_default_to_no_and_exclude_input_toggles(self) -> None:
+    def test_boolean_options_default_to_no_and_linked_inputs(self) -> None:
         self.window._create_project()
         self.window._create_scan()
 
@@ -680,7 +680,7 @@ class MainWindowProjectTests(unittest.TestCase):
         self.window._exclude_mode.setCurrentText("No")
         self.assertFalse(self.window._exclude_ports_edit.isEnabled())
 
-        self.assertFalse(self.window._nmap_extra_args_edit.isEnabled())
+        self.assertTrue(self.window._nmap_extra_args_edit.isEnabled())
         self.assertEqual(
             self.window._nmap_extra_args_edit.placeholderText(),
             "Additional Nmap scan arguments",
@@ -688,7 +688,7 @@ class MainWindowProjectTests(unittest.TestCase):
         self.window._nmap_version_combo.setCurrentText("Yes")
         self.assertTrue(self.window._nmap_extra_args_edit.isEnabled())
         self.window._nmap_version_combo.setCurrentText("No")
-        self.assertFalse(self.window._nmap_extra_args_edit.isEnabled())
+        self.assertTrue(self.window._nmap_extra_args_edit.isEnabled())
         self.assertFalse(self.window._scan_script_combo.isEnabled())
 
     def test_choose_address_file_loads_txt_targets(self) -> None:
@@ -1104,6 +1104,27 @@ class MainWindowProjectTests(unittest.TestCase):
         self.assertEqual(
             submitted["arguments"],
             ["-a", "127.0.0.1", "-p", "80", "--no-banner", "--", "-sV", "-sC"],
+        )
+
+    def test_start_scan_sends_extra_nmap_args_without_version_detection(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+        submitted: dict[str, object] = {}
+
+        def fake_start(program, arguments, working_directory) -> None:
+            submitted["arguments"] = arguments
+
+        self.window._runner.start = fake_start
+        self.window._address_edit.setText("127.0.0.1")
+        self.window._ports_edit.setText("80")
+        self.window._nmap_version_combo.setCurrentText("No")
+        self.window._nmap_extra_args_edit.setText("-sC")
+
+        self.window._start_scan()
+
+        self.assertEqual(
+            submitted["arguments"],
+            ["-a", "127.0.0.1", "-p", "80", "--no-banner", "--", "-sC"],
         )
 
     def test_scan_script_selector_uses_scripts_from_script_folder(self) -> None:

@@ -10,6 +10,8 @@ A GUI for RustScan built with **Python + PySide6 (Qt 6)**.
 
 Features: **RustScan fast scanning, project-based scan management, importable address and port support for Sniper Scan and Pitchfork Scan, Nmap integration, script execution and management, and result viewing / CSV export**.
 
+**All you love about Nmap is here can be continued here（Support Nmap）**
+
 ## Requirements
 
 - Windows 10/11
@@ -69,7 +71,7 @@ Select a scan in the left sidebar to open its detail page on the right:
   - `Ignore configuration file`: defaults to `No`.
   - `Use UDP mode`: defaults to `No`.
   - `Use Nmap service/version detection`: defaults to `No`. When set to `Yes`, `-g` is omitted and Nmap is invoked with `-sV` to identify service versions.
-  - `Extra Nmap arguments`: enabled only when the option above is set to `Yes`, for example `-sC`. The arguments are appended after `--` and passed to Nmap together with `-sV`.
+  - `Extra Nmap arguments`: always available. Enter additional Nmap arguments such as `-sC`; when provided, they are appended after `--` and passed to Nmap even when service/version detection is set to `No`.
   - `Use script`: defaults to `No`. Selecting `Yes` enables the script dropdown below it and lists the scripts available in the `script/` folder. During a scan, the absolute path of the selected script is passed to Nmap through `--script` and saved in `scan_info.xml`.
   - A light-blue `Start Scan` button is provided at the bottom of the page. The scan does not start when both the scan address and imported address file are empty.
   - Each scan folder receives a `scan_info.xml` file that stores the last-used scan options. The options are restored when the scan is selected again or the application is restarted.

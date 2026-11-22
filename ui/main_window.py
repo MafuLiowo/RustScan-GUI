@@ -1228,7 +1228,6 @@ class MainWindow(QMainWindow):
         self._nmap_extra_args_edit.setPlaceholderText(
             self._t("scan.nmap_extra_args_placeholder")
         )
-        self._nmap_extra_args_edit.setEnabled(False)
         self._nmap_version_combo.currentIndexChanged.connect(
             self._on_nmap_version_mode_changed
         )
@@ -1814,7 +1813,6 @@ class MainWindow(QMainWindow):
             self._nmap_version_combo, values.get("use_nmap", False)
         )
         self._nmap_extra_args_edit.setText(values.get("nmap_extra_args", ""))
-        self._update_nmap_extra_enabled(self._combo_value(self._nmap_version_combo))
         self._refresh_scan_script_combo(str(values.get("script_name", "")))
         self._set_yes_no_combo(
             self._use_script_combo, values.get("use_script", False)
@@ -2066,12 +2064,8 @@ class MainWindow(QMainWindow):
 
     def _on_nmap_version_mode_changed(self, _index: int) -> None:
         enabled = bool(self._nmap_version_combo.currentData())
-        self._update_nmap_extra_enabled(enabled)
         if enabled:
             self._nmap_extra_args_edit.setFocus()
-
-    def _update_nmap_extra_enabled(self, enabled: bool) -> None:
-        self._nmap_extra_args_edit.setEnabled(enabled)
 
     def _refresh_scan_script_combo(self, selected: str | None = None) -> None:
         if not hasattr(self, "_scan_script_combo"):

@@ -94,7 +94,7 @@ class CommandBuilderTests(unittest.TestCase):
             ],
         )
 
-    def test_extra_nmap_arguments_are_ignored_when_nmap_is_disabled(self) -> None:
+    def test_extra_nmap_arguments_are_sent_when_version_detection_is_disabled(self) -> None:
         options = ScanOptions(
             address="127.0.0.1",
             use_nmap=False,
@@ -103,7 +103,7 @@ class CommandBuilderTests(unittest.TestCase):
 
         self.assertEqual(
             build_rustscan_args(options),
-            ["-a", "127.0.0.1", "-g", "--no-banner"],
+            ["-a", "127.0.0.1", "--no-banner", "--", "-sC"],
         )
 
     def test_uses_selected_script_through_nmap(self) -> None:
