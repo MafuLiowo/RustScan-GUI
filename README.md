@@ -10,7 +10,7 @@ A GUI for RustScan built with **Python + PySide6 (Qt 6)**.
 
 Features: **RustScan fast scanning, project-based scan management, importable address and port support for Sniper Scan and Pitchfork Scan, Nmap integration, script execution and management, and result viewing / CSV export**.
 
-**All you love about Nmap is here can be continued here（Support Nmap）**
+**All you love about Nmap, here can be continued.（Support Nmap）**
 
 ## Requirements
 
