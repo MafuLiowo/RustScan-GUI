@@ -46,7 +46,7 @@ project/
 
 Select a scan in the left sidebar to open its detail page on the right:
 
-- **Highlights**
+- **Features**
   1. When both addresses and ports are imported from files, you can choose **Pitchfork Scan** or **Sniper Scan**.
      - **Sniper Scan**: every address is scanned against all imported ports. Manually entered ports use Sniper Scan by default.
      - **Pitchfork Scan**: addresses and imported ports are paired in one-to-one order.
