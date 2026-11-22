@@ -32,7 +32,6 @@ class CommandBuilderTests(unittest.TestCase):
                 "22,3389",
                 "-n",
                 "--udp",
-                "-g",
                 "--no-banner",
             ],
         )
@@ -42,7 +41,7 @@ class CommandBuilderTests(unittest.TestCase):
 
         self.assertEqual(
             build_rustscan_args(options),
-            ["-a", "127.0.0.1", "-r", "80-8080", "-g", "--no-banner"],
+            ["-a", "127.0.0.1", "-r", "80-8080", "--no-banner"],
         )
 
     def test_defaults_omit_optional_arguments(self) -> None:
@@ -50,10 +49,10 @@ class CommandBuilderTests(unittest.TestCase):
 
         self.assertEqual(
             build_rustscan_args(options),
-            ["-a", "127.0.0.1", "-g", "--no-banner"],
+            ["-a", "127.0.0.1", "--no-banner"],
         )
 
-    def test_use_nmap_omits_greppable_and_enables_service_detection(self) -> None:
+    def test_use_nmap_enables_service_detection(self) -> None:
         options = ScanOptions(address="127.0.0.1", ports="80", use_nmap=True)
 
         self.assertEqual(

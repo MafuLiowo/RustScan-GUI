@@ -26,6 +26,23 @@ _NMAP_REASON_PREFIX = re.compile(
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
+def parse_open_port_line(
+    line: str,
+    *,
+    protocol: str = "tcp",
+) -> PortResult | None:
+    """解析单行 ``Open host:port`` 输出，用于扫描过程中的即时结果。"""
+    opened = _OPEN_LINE.match(_ANSI_ESCAPE.sub("", line))
+    if opened is None:
+        return None
+    return PortResult(
+        address=opened.group(1),
+        port=opened.group(2),
+        protocol=protocol,
+        state="open",
+    )
+
+
 def parse_rustscan_output(
     output: str,
     *,
@@ -60,17 +77,10 @@ def parse_rustscan_output(
                     )
             continue
 
-        opened = _OPEN_LINE.match(line)
-        if opened:
-            results.append(
-                PortResult(
-                    address=opened.group(1),
-                    port=opened.group(2),
-                    protocol=protocol,
-                    state="open",
-                )
-            )
-            current_address = opened.group(1).strip()
+        opened = parse_open_port_line(line, protocol=protocol)
+        if opened is not None:
+            results.append(opened)
+            current_address = opened.address.strip()
             continue
 
         service_line = _NMAP_SERVICE_LINE.match(line)

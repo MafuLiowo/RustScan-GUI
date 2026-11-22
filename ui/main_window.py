@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable
 
 import PySide6
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QUrl, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -83,7 +83,7 @@ from config.settings import (
     PROJECT_ROOT,
 )
 from core.command_builder import build_rustscan_args
-from core.output_parser import parse_rustscan_output
+from core.output_parser import parse_open_port_line, parse_rustscan_output
 from core.rustscan_runner import RustscanRunner
 from core.scan_planner import (
     ATTACK_PITCHFORK,
@@ -200,8 +200,16 @@ class MainWindow(QMainWindow):
         self._scan_base_options: ScanOptions | None = None
         self._scan_executable: Path | None = None
         self._scan_results: list[PortResult] = []
+        self._scan_result_keys: set[tuple[str, str, str]] = set()
+        self._scan_result_filename = ""
         self._scan_target_summary = ""
         self._scan_path: Path | None = None
+        self._live_result_save_error_logged = False
+
+        self._live_result_timer = QTimer(self)
+        self._live_result_timer.setSingleShot(True)
+        self._live_result_timer.setInterval(250)
+        self._live_result_timer.timeout.connect(self._flush_live_scan_results)
 
         self._runner = RustscanRunner(self, nmap_path=self._nmap_path)
         self._runner.finished.connect(self._on_scan_finished)
@@ -280,12 +288,63 @@ class MainWindow(QMainWindow):
             line = self._scan_output_buffer[:index]
             self._scan_output_buffer = self._scan_output_buffer[index + 1 :]
             if line.strip():
-                self._append_log("SCAN", line)
+                self._handle_scan_output_line(line)
 
     def _flush_scan_output(self) -> None:
         if self._scan_output_buffer.strip():
-            self._append_log("SCAN", self._scan_output_buffer)
+            self._handle_scan_output_line(self._scan_output_buffer)
         self._scan_output_buffer = ""
+
+    def _handle_scan_output_line(self, line: str) -> None:
+        self._append_log("SCAN", line)
+        result = parse_open_port_line(
+            line,
+            protocol=self._active_scan_protocol,
+        )
+        if result is not None and self._scan_path is not None:
+            self._record_live_scan_result(result)
+
+    def _record_live_scan_result(self, result: PortResult) -> None:
+        key = (result.address, result.port, result.protocol)
+        if key in self._scan_result_keys:
+            return
+        self._scan_result_keys.add(key)
+        self._scan_results.append(result)
+        if not self._live_result_timer.isActive():
+            self._live_result_timer.start()
+
+    def _flush_live_scan_results(self) -> None:
+        """把已发现的开放端口写入当前结果 XML，并刷新正在显示的结果页。"""
+        if self._scan_path is None or not self._scan_result_filename:
+            return
+        results = self._merge_port_results(self._scan_results)
+        if not results:
+            return
+        try:
+            save_results(
+                self._scan_path,
+                results,
+                target=self._scan_target_summary,
+                filename=self._scan_result_filename,
+                job_count=len(self._scan_jobs) if len(self._scan_jobs) > 1 else None,
+            )
+        except OSError as exc:
+            if not self._live_result_save_error_logged:
+                self._append_log(
+                    "ERROR",
+                    self._t("dialog.cannot_write_scan_dir", error=exc),
+                )
+                self._live_result_save_error_logged = True
+            return
+
+        self._live_result_save_error_logged = False
+        self._result_cache.pop(str(self._scan_path), None)
+        if (
+            self._current_scan is not None
+            and self._current_scan.path == self._scan_path
+            and self._tabs.currentIndex() == 1
+        ):
+            self._refresh_results()
 
     def _save_language_config(self) -> OSError | None:
         try:
@@ -1250,10 +1309,14 @@ class MainWindow(QMainWindow):
         )
         form.addWidget(self._scan_script_combo)
 
+        mode_tip = QLabel(self._t("scan.file_import_mode_tip"))
+        mode_tip.setObjectName("Muted")
+        mode_tip.setWordWrap(True)
         tip = QLabel(self._t("scan.tip"))
         tip.setObjectName("Muted")
         tip.setWordWrap(True)
         form.addSpacing(8)
+        form.addWidget(mode_tip)
         form.addWidget(tip)
 
         content_layout.addWidget(card)
@@ -2311,6 +2374,12 @@ class MainWindow(QMainWindow):
         self._scan_base_options = options
         self._scan_executable = executable
         self._scan_results = []
+        self._scan_result_keys.clear()
+        self._scan_result_filename = datetime.now().strftime(
+            "result-%Y-%m-%d-%H-%M-%S.xml"
+        )
+        self._live_result_save_error_logged = False
+        self._live_result_timer.stop()
         self._scan_path = scan_path
         self._scan_target_summary = (
             jobs[0].address
@@ -2369,11 +2438,13 @@ class MainWindow(QMainWindow):
 
     def _on_scan_finished(self, exit_code: int, stdout: str, stderr: str) -> None:
         self._flush_scan_output()
+        self._live_result_timer.stop()
         scan_path = self._scan_path
         target = self._active_scan_target
         protocol = self._active_scan_protocol
 
         if exit_code != 0:
+            self._flush_live_scan_results()
             details = (stderr or stdout).strip()
             if len(details) > 4000:
                 details = details[:4000] + "\n…"
@@ -2413,12 +2484,15 @@ class MainWindow(QMainWindow):
         self._scan_results.extend(results)
         self._scan_job_index += 1
         if self._scan_job_index < len(self._scan_jobs):
+            self._flush_live_scan_results()
             self._start_next_scan_job()
             return
 
         final_results = self._merge_port_results(self._scan_results)
         target_summary = self._scan_target_summary
-        result_filename = datetime.now().strftime("result-%Y-%m-%d-%H-%M-%S.xml")
+        result_filename = self._scan_result_filename or datetime.now().strftime(
+            "result-%Y-%m-%d-%H-%M-%S.xml"
+        )
         try:
             result_path = save_results(
                 scan_path,
@@ -2467,11 +2541,15 @@ class MainWindow(QMainWindow):
         )
 
     def _reset_scan_queue(self) -> None:
+        self._live_result_timer.stop()
         self._scan_jobs = []
         self._scan_job_index = 0
         self._scan_base_options = None
         self._scan_executable = None
         self._scan_results = []
+        self._scan_result_keys.clear()
+        self._scan_result_filename = ""
+        self._live_result_save_error_logged = False
         self._scan_path = None
         self._active_scan_path = None
         self._active_scan_target = ""

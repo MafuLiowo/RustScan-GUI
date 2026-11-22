@@ -5,8 +5,8 @@ from __future__ import annotations
 from models.scan_options import ScanOptions
 
 
-def build_rustscan_args(options: ScanOptions, *, greppable: bool = True) -> list[str]:
-    """构建 rustscan 参数；默认使用 greppable 模式以便程序解析。"""
+def build_rustscan_args(options: ScanOptions) -> list[str]:
+    """构建 rustscan 参数；使用 Open 行实时解析开放端口。"""
     args = ["-a", options.address]
     extra_nmap_args = _split_nmap_args(options.nmap_extra_args)
     uses_nmap = (
@@ -27,8 +27,6 @@ def build_rustscan_args(options: ScanOptions, *, greppable: bool = True) -> list
         args.append("-n")
     if options.udp:
         args.append("--udp")
-    if greppable and not uses_nmap:
-        args.append("-g")
     args.append("--no-banner")
     if uses_nmap:
         args.append("--")

@@ -691,6 +691,24 @@ class MainWindowProjectTests(unittest.TestCase):
         self.assertTrue(self.window._nmap_extra_args_edit.isEnabled())
         self.assertFalse(self.window._scan_script_combo.isEnabled())
 
+    def test_scan_options_show_file_import_mode_hint_above_results_hint(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+
+        labels = [
+            label.text()
+            for label in self.window._scan_options_scroll.widget().findChildren(QLabel)
+        ]
+        mode_hint = (
+            "Pitchfork and Sniper modes are available only when both the address "
+            "and ports are imported from files."
+        )
+        results_hint = "Results are saved in the current scan folder and displayed from XML files."
+
+        self.assertIn(mode_hint, labels)
+        self.assertIn(results_hint, labels)
+        self.assertEqual(labels.index(mode_hint) + 1, labels.index(results_hint))
+
     def test_choose_address_file_loads_txt_targets(self) -> None:
         targets = Path(self._temp.name) / "targets.txt"
         targets.write_text(
@@ -749,7 +767,6 @@ class MainWindowProjectTests(unittest.TestCase):
                 "192.168.1.10,one.example.com,192.168.1.11,two.example.com",
                 "-p",
                 "80",
-                "-g",
                 "--no-banner",
             ],
         )
@@ -894,7 +911,6 @@ class MainWindowProjectTests(unittest.TestCase):
                 "one.example.com,two.example.com",
                 "-p",
                 "80,443",
-                "-g",
                 "--no-banner",
             ],
         )
@@ -933,7 +949,6 @@ class MainWindowProjectTests(unittest.TestCase):
                 "one.example.com,two.example.com",
                 "-p",
                 "80,443",
-                "-g",
                 "--no-banner",
             ],
         )
@@ -965,7 +980,7 @@ class MainWindowProjectTests(unittest.TestCase):
 
         self.assertEqual(
             submitted,
-            [["-a", "one.example.com", "-p", "80", "-g", "--no-banner"]],
+            [["-a", "one.example.com", "-p", "80", "--no-banner"]],
         )
         self.assertEqual(len(self.window._scan_jobs), 2)
 
@@ -977,7 +992,7 @@ class MainWindowProjectTests(unittest.TestCase):
             )
             self.assertEqual(
                 submitted[-1],
-                ["-a", "two.example.com", "-p", "443", "-g", "--no-banner"],
+                ["-a", "two.example.com", "-p", "443", "--no-banner"],
             )
             self.window._on_scan_finished(
                 0,
@@ -1060,7 +1075,6 @@ class MainWindowProjectTests(unittest.TestCase):
                 "-e",
                 "22",
                 "-n",
-                "-g",
                 "--no-banner",
             ],
         )
@@ -1105,6 +1119,51 @@ class MainWindowProjectTests(unittest.TestCase):
             submitted["arguments"],
             ["-a", "127.0.0.1", "-p", "80", "--no-banner", "--", "-sV", "-sC"],
         )
+
+    def test_open_port_is_added_to_results_before_scan_finishes(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+        scan_path = self.store.root / "New Project" / "New Scan"
+        self.window._runner.start = lambda *_args: None
+        self.window._address_edit.setText("192.168.36.128")
+        self.window._ports_edit.setText("2377")
+        self.window._start_scan()
+        self.window._tabs.setCurrentIndex(1)
+
+        self.window._runner.outputReceived.emit("Open 192.168.36.128:2377\n")
+        self.app.processEvents()
+
+        self.assertEqual(len(self.window._scan_results), 1)
+        self.assertTrue(self.window._live_result_timer.isActive())
+
+        self.window._flush_live_scan_results()
+        documents = load_result_documents(scan_path)
+        self.assertEqual(len(documents), 1)
+        self.assertEqual(
+            [(item.address, item.port) for item in documents[0].results],
+            [("192.168.36.128", "2377")],
+        )
+        self.assertEqual(self.window._result_table.rowCount(), 1)
+        self.assertEqual(self.window._result_table.item(0, 1).text(), "2377")
+
+        with patch("ui.main_window.QMessageBox.information"):
+            self.window._on_scan_finished(
+                0,
+                (
+                    "Open 192.168.36.128:2377\n"
+                    "Nmap scan report for 192.168.36.128\n"
+                    "PORT     STATE SERVICE VERSION\n"
+                    "2377/tcp open  swarm   syn-ack ttl 64 Docker Swarm\n"
+                ),
+                "",
+            )
+
+        result_files = list(scan_path.glob("result-*.xml"))
+        documents = load_result_documents(scan_path)
+        self.assertEqual(len(result_files), 1)
+        self.assertEqual(len(documents[0].results), 1)
+        self.assertEqual(documents[0].results[0].service, "swarm")
+        self.assertEqual(documents[0].results[0].version, "Docker Swarm")
 
     def test_start_scan_sends_extra_nmap_args_without_version_detection(self) -> None:
         self.window._create_project()

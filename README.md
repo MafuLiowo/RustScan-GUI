@@ -70,7 +70,7 @@ Select a scan in the left sidebar to open its detail page on the right:
   - `Add excluded ports`: defaults to `No`. Select `Yes` to enter the ports to exclude.
   - `Ignore configuration file`: defaults to `No`.
   - `Use UDP mode`: defaults to `No`.
-  - `Use Nmap service/version detection`: defaults to `No`. When set to `Yes`, `-g` is omitted and Nmap is invoked with `-sV` to identify service versions.
+  - `Use Nmap service/version detection`: defaults to `No`. Regular scans always use RustScan's normal `Open host:port` output without `-g`. When set to `Yes`, Nmap is invoked with `-sV` to identify service versions.
   - `Extra Nmap arguments`: always available. Enter additional Nmap arguments such as `-sC`; when provided, they are appended after `--` and passed to Nmap even when service/version detection is set to `No`.
   - `Use script`: defaults to `No`. Selecting `Yes` enables the script dropdown below it and lists the scripts available in the `script/` folder. During a scan, the absolute path of the selected script is passed to Nmap through `--script` and saved in `scan_info.xml`.
   - A light-blue `Start Scan` button is provided at the bottom of the page. The scan does not start when both the scan address and imported address file are empty.
@@ -78,6 +78,7 @@ Select a scan in the left sidebar to open its detail page on the right:
 - **Scan Results**
   - Reads every `.xml` result file in the current scan folder.
   - Each scan creates a timestamped result file named `result-YYYY-MM-DD-HH-MM-SS.xml`.
+  - As soon as an `Open host:port` line appears in the live log, that open port is added to the timestamped result XML and the visible result table. Nmap service and version details are filled in later as they become available.
   - Multi-job scans such as Pitchfork store a language-neutral job count in the XML and render the target summary in the current interface language, for example `4 scan jobs` in English or `4 组扫描任务` in Simplified Chinese. Older result files using the previously localized target text are also recognized and translated.
   - The table shows address, port, protocol, state, service, and version.
   - A successful scan is written to the current scan folder automatically and the application switches to the result page. A failed scan does not overwrite existing results.
@@ -102,7 +103,7 @@ Example of the result format written by this application (see also `docs/sample_
 
 Multi-job results also include a `job_count` attribute, which the interface uses to localize the target summary without modifying the saved result file.
 
-> Scans run asynchronously through `QProcess` and do not block the interface. RustScan runs in greppable mode; the application parses open ports and writes them to a timestamped `result-YYYY-MM-DD-HH-MM-SS.xml` file.
+> Scans run asynchronously through `QProcess` and do not block the interface. RustScan emits `Open host:port` lines, which the application parses immediately and writes to a timestamped `result-YYYY-MM-DD-HH-MM-SS.xml` file.
 
 ## Settings, Language, and Interface
 
