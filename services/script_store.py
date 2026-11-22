@@ -67,6 +67,10 @@ class ScriptStore:
         path.write_text(content, encoding="utf-8")
         return cleaned
 
+    def delete_script(self, name: str) -> None:
+        path = self.root / self.validate_name(name)
+        path.unlink()
+
     def validate_name(self, name: str) -> str:
         cleaned = name.strip()
         if not cleaned:

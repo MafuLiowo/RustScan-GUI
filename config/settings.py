@@ -10,7 +10,7 @@ from pathlib import Path
 
 APP_NAME = "RustScan GUI"
 APP_WINDOW_TITLE = "RustScan-GUI by MafuLiowo"
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
 ORGANIZATION = "RustScan GUI"
 
 def _application_root() -> Path:

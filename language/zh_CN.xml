@@ -41,15 +41,23 @@
   <text key="scan.tab_options">扫描选项</text>
   <text key="scan.tab_results">扫描结果</text>
   <text key="scan.tab_logs">日志</text>
-  <text key="scan.address_label">扫描地址（支持 CIDR、IP）</text>
+  <text key="scan.address_label">扫描地址（支持域名、CIDR、IP）</text>
   <text key="scan.address_placeholder">例如：192.168.1.0/24 或 127.0.0.1</text>
+  <text key="scan.import_address_label">从文件导入地址（支持txt、csv）</text>
+  <text key="scan.import_address_placeholder">导入地址文件的位置</text>
+  <text key="scan.choose_file">选择</text>
   <text key="scan.exclude_ip_label">是否添加排除IP地址</text>
   <text key="scan.exclude_ip_placeholder">排除的IP地址</text>
   <text key="scan.ports_title">扫描端口</text>
   <text key="scan.port_mode_ports">端口</text>
   <text key="scan.port_mode_range">范围</text>
+  <text key="scan.port_mode_file">文件导入</text>
   <text key="scan.ports_placeholder_ports">端口（逗号隔开，例如:80,8080）</text>
   <text key="scan.ports_placeholder_range">范围，例如(80-8080)</text>
+  <text key="scan.ports_placeholder_file">端口文件位置（0-65535）</text>
+  <text key="scan.attack_type_label">地址与端口扫描类型</text>
+  <text key="scan.attack_sniper">Sniper扫描</text>
+  <text key="scan.attack_pitchfork">Pitchfork扫描</text>
   <text key="scan.exclude_ports_label">是否添加排除端口</text>
   <text key="scan.exclude_ports_placeholder">排除端口（逗号隔开，例如:80,8080）</text>
   <text key="scan.ignore_config_label">是否忽略配置文件</text>
@@ -63,6 +71,10 @@
 
   <text key="results.file_label">结果文件</text>
   <text key="results.refresh">刷新</text>
+  <text key="results.export_csv">导出为CSV格式</text>
+  <text key="results.export_dialog_title">导出扫描结果为CSV</text>
+  <text key="results.export_filter">CSV 文件 (*.csv)</text>
+  <text key="results.export_no_results">当前选中的结果中没有可导出的内容。</text>
   <text key="results.empty_hint">暂无扫描结果。将 XML 结果文件放入该扫描文件夹后，点击“刷新”即可查看。</text>
   <text key="results.parse_error">{filename} 解析失败：{error}</text>
   <text key="results.summary">{filename}  ·  {count} 条结果</text>
@@ -82,6 +94,7 @@
   <text key="context.rename">重命名</text>
   <text key="context.open_explorer">在资源管理器中打开</text>
   <text key="context.delete">删除</text>
+  <text key="context.delete_script">删除脚本</text>
   <text key="common.yes">是</text>
   <text key="common.no">否</text>
 
@@ -96,12 +109,20 @@
   <text key="status.renamed">已重命名：{old_name} → {new_name}</text>
   <text key="status.deleted">已删除：{name}</text>
   <text key="status.script_added">已添加脚本：{name}</text>
+  <text key="status.script_deleted">已删除脚本：{name}</text>
+  <text key="status.address_file_loaded">已从 {name} 导入 {count} 个地址</text>
+  <text key="status.address_port_file_loaded">已从 {name} 导入 {count} 组地址与端口，已启用 Pitchfork扫描</text>
+  <text key="status.port_file_loaded">已从 {name} 导入 {count} 个端口</text>
+  <text key="status.no_valid_scan_targets">没有可用的扫描目标或端口。</text>
+  <text key="status.scan_targets">{count} 组扫描任务</text>
+  <text key="status.scanning_job">正在扫描任务 {current}/{total}：{target}…</text>
   <text key="status.scanning">正在扫描 {target}…</text>
   <text key="status.scan_failed_code">扫描失败（退出码 {code}）</text>
   <text key="status.scan_no_scan_dir">扫描已完成，但没有可保存的扫描目录。</text>
   <text key="status.scan_save_failed">扫描完成，但结果保存失败。</text>
   <text key="status.scan_completed">扫描完成：{count} 个开放端口  ·  {path}</text>
   <text key="status.scan_start_failed">扫描启动失败</text>
+  <text key="status.csv_exported">已导出 {count} 条结果：{path}</text>
   <text key="status.language_changed">语言已切换：{language}</text>
   <text key="status.config_save_failed">语言已切换，但无法保存 config.ini：{error}</text>
   <text key="status.display_mode_changed">显示模式已切换：{mode}</text>
@@ -112,6 +133,7 @@
   <text key="log.application_started">应用程序已启动（v{version}）。</text>
   <text key="log.scan_command">RustScan 命令：{command}</text>
   <text key="log.scan_info_save_failed">无法保存 scan_info.xml：{error}</text>
+  <text key="log.auto_address_port_mode">地址文件包含端口，已自动切换到文件导入和 Pitchfork扫描（{count} 组地址/端口）。</text>
 
   <text key="dialog.new_project_failed">新建项目失败</text>
   <text key="dialog.cannot_create_project">无法创建项目文件夹：
@@ -123,6 +145,24 @@
 {error}</text>
   <text key="dialog.cannot_start_scan">无法开始扫描</text>
   <text key="dialog.address_required">请填写扫描地址。</text>
+  <text key="dialog.choose_address_file">选择地址文件</text>
+  <text key="dialog.address_file_filter">地址文件 (*.txt *.csv);;文本文件 (*.txt);;CSV 文件 (*.csv)</text>
+  <text key="dialog.address_file_failed">地址文件错误</text>
+  <text key="dialog.address_file_required">请选择要导入的地址文件。</text>
+  <text key="dialog.address_file_unsupported">仅支持 .txt 和 .csv 文件。</text>
+  <text key="dialog.address_file_no_column">CSV 文件中未找到 IP 或域名列。</text>
+  <text key="dialog.address_file_empty">地址文件中没有可用的 IP 或域名。</text>
+  <text key="dialog.address_file_read_failed">无法读取地址文件：
+{error}</text>
+  <text key="dialog.choose_port_file">选择端口文件</text>
+  <text key="dialog.port_file_filter">端口文件 (*.txt *.csv);;文本文件 (*.txt);;CSV 文件 (*.csv)</text>
+  <text key="dialog.port_file_failed">端口文件错误</text>
+  <text key="dialog.port_file_required">请选择要导入的端口文件。</text>
+  <text key="dialog.port_file_unsupported">仅支持 .txt 和 .csv 文件。</text>
+  <text key="dialog.port_file_no_column">CSV 文件中未找到端口列。</text>
+  <text key="dialog.port_file_empty">端口文件中没有 0-65535 范围内的有效端口。</text>
+  <text key="dialog.port_file_read_failed">无法读取端口文件：
+{error}</text>
   <text key="dialog.script_unavailable">所选脚本不可用，请从 script 文件夹中选择脚本。</text>
   <text key="dialog.rustscan_missing">未找到 rustscan.exe。请确认 bin/rustscan.exe 存在。</text>
   <text key="dialog.cannot_access_scan_dir">无法访问扫描文件夹：
@@ -142,6 +182,9 @@
   <text key="dialog.scan_start_failed">扫描启动失败</text>
   <text key="dialog.cannot_start_rustscan">无法启动 RustScan：
 {error}</text>
+  <text key="dialog.csv_export_failed">CSV 导出失败</text>
+  <text key="dialog.cannot_write_csv">无法写入 CSV 文件：
+{error}</text>
   <text key="dialog.rename">重命名</text>
   <text key="dialog.new_name">新的名称：</text>
   <text key="dialog.invalid_name">名称无效</text>
@@ -156,6 +199,9 @@
   <text key="dialog.confirm">确认</text>
   <text key="dialog.delete_failed">删除失败</text>
   <text key="dialog.cannot_delete_folder">无法删除文件夹：
+{error}</text>
+  <text key="dialog.delete_script_body">确定要删除脚本“{name}”吗？本地脚本文件也会同步删除。</text>
+  <text key="dialog.cannot_delete_script">无法删除脚本：
 {error}</text>
   <text key="dialog.open_failed">打开失败</text>
   <text key="dialog.cannot_access_folder">无法创建或访问文件夹：

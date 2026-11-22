@@ -8,7 +8,7 @@
 
 A GUI for RustScan built with **Python + PySide6 (Qt 6)**.
 
-Current status: **project/scan directory management, scan execution, XML result viewing, English/Simplified Chinese switching, light/dark/follow-system themes and configuration persistence, script management, and script creation are complete**.
+Features: **RustScan fast scanning, project-based scan management, importable address and port support for Sniper Scan and Pitchfork Scan, Nmap integration, script execution and management, and result viewing / CSV export**.
 
 ## Requirements
 
@@ -46,12 +46,24 @@ project/
 
 Select a scan in the left sidebar to open its detail page on the right:
 
+- **Features**
+  1. When both addresses and ports are imported from files, you can choose **Pitchfork Scan** or **Sniper Scan**.
+     - **Sniper Scan**: every address is scanned against all imported ports. Manually entered ports use Sniper Scan by default.
+     - **Pitchfork Scan**: addresses and imported ports are paired in one-to-one order.
+  2. **Script management**: import Nmap scripts in `.nse` format.
+  3. **Project management**: run scans for different projects and manage them inside the application.
+
 - **Scan Options**
-  - `* Scan address (supports CIDR and IP)`: the red asterisk marks a required field. A single IP address or a CIDR range is accepted.
+  - `* Scan address (supports domain, CIDR, and IP)`: the red asterisk marks a required field. A domain name, a single IP address, or a CIDR range is accepted.
+  - `Import addresses from file (txt, csv)`: defaults to `No`. When set to `Yes`, the manual scan address input is disabled and you can enter or choose a `.txt` or `.csv` address file. TXT files accept one or more targets per line; CSV files read IP and domain columns using common English or Chinese headers. The switch and file path are saved in `scan_info.xml`.
+  - If the imported address file also contains a port column, the application skips invalid address/port rows, switches the port mode to **File Import**, reuses the same file, and selects **Pitchfork Scan** automatically.
   - If the form is taller than the window, scroll with the mouse wheel. The **Start Scan** button stays fixed at the bottom of the page.
-  - The port-mode dropdown offers `Port` and `Range`.
+  - The port-mode dropdown offers `Port`, `Range`, and `File Import`.
   - With `Port` selected, the placeholder is `Ports (comma-separated, e.g. 80,8080)`.
   - With `Range` selected, the placeholder is `Range, e.g. (80-8080)`.
+  - With `File Import` selected, use the **Choose** button to open a `.txt` or `.csv` port file. Ports must be between `0` and `65535`; invalid values are skipped.
+  - When both the address and port sources are files, `Address and port scan type` becomes available. **Sniper Scan** scans every imported address against every imported port; **Pitchfork Scan** scans addresses and ports as one-to-one pairs.
+  - A Pitchfork Scan runs paired jobs sequentially and writes one aggregated, timestamped XML result after all jobs finish.
   - `Add excluded IP addresses`: defaults to `No`. Select `Yes` to enter the IP addresses to exclude.
   - `Add excluded ports`: defaults to `No`. Select `Yes` to enter the ports to exclude.
   - `Ignore configuration file`: defaults to `No`.
@@ -59,16 +71,18 @@ Select a scan in the left sidebar to open its detail page on the right:
   - `Use Nmap service/version detection`: defaults to `No`. When set to `Yes`, `-g` is omitted and Nmap is invoked with `-sV` to identify service versions.
   - `Extra Nmap arguments`: enabled only when the option above is set to `Yes`, for example `-sC`. The arguments are appended after `--` and passed to Nmap together with `-sV`.
   - `Use script`: defaults to `No`. Selecting `Yes` enables the script dropdown below it and lists the scripts available in the `script/` folder. During a scan, the absolute path of the selected script is passed to Nmap through `--script` and saved in `scan_info.xml`.
-  - A light-blue `Start Scan` button is provided at the bottom of the page. The scan does not start when the scan address is empty.
+  - A light-blue `Start Scan` button is provided at the bottom of the page. The scan does not start when both the scan address and imported address file are empty.
   - Each scan folder receives a `scan_info.xml` file that stores the last-used scan options. The options are restored when the scan is selected again or the application is restarted.
 - **Scan Results**
   - Reads every `.xml` result file in the current scan folder.
   - Each scan creates a timestamped result file named `result-YYYY-MM-DD-HH-MM-SS.xml`.
+  - Multi-job scans such as Pitchfork store a language-neutral job count in the XML and render the target summary in the current interface language, for example `4 scan jobs` in English or `4 组扫描任务` in Simplified Chinese. Older result files using the previously localized target text are also recognized and translated.
   - The table shows address, port, protocol, state, service, and version.
   - A successful scan is written to the current scan folder automatically and the application switches to the result page. A failed scan does not overwrite existing results.
   - Both Nmap/RustScan `<nmaprun>` XML and the application's own result format are supported.
   - `scan_info.xml` is used only to store scan options and is never shown as a result file.
   - After adding a new XML file, click **Refresh** to load it again.
+  - Use the green **Export as CSV** button to export every row from the currently selected result file. The CSV is saved with a UTF-8 BOM so it opens correctly in Excel.
 - **Logs**
   - Located to the right of **Scan Results**. RustScan stdout/stderr is appended in real time.
   - Also records application state such as project/scan creation and renaming, language and theme changes, and scan start/completion/failure events.
@@ -83,6 +97,8 @@ Example of the result format written by this application (see also `docs/sample_
   <result address="127.0.0.1" port="80" protocol="tcp" state="open" service="http" version="nginx 1.24.0"/>
 </scan_results>
 ```
+
+Multi-job results also include a `job_count` attribute, which the interface uses to localize the target summary without modifying the saved result file.
 
 > Scans run asynchronously through `QProcess` and do not block the interface. RustScan runs in greppable mode; the application parses open ports and writes them to a timestamped `result-YYYY-MM-DD-HH-MM-SS.xml` file.
 
@@ -138,14 +154,19 @@ RustScan-GUI/
 ├── language/
 │   ├── en.xml                  # English interface strings
 │   └── zh_CN.xml               # Simplified Chinese interface strings
-├── core/                       # command construction, QProcess scan execution, output parsing
+├── core/                       # command construction, job planning, QProcess execution, output parsing
 ├── models/
 │   ├── project.py              # project/scan node models
 │   └── result.py               # port result model
 ├── services/
 │   ├── project_store.py        # local folder creation, loading, and renaming
+│   ├── address_file.py         # TXT/CSV address import and validation
+│   ├── address_port_file.py    # address/port file pairing and invalid-row skipping
+│   ├── port_file.py            # TXT/CSV port import for ports 0-65535
+│   ├── scan_info_store.py      # scan_info.xml option persistence
 │   ├── language_store.py       # XML language-pack loading and text lookup
 │   ├── app_config.py           # config.ini language/display-mode/Nmap-path persistence
+│   ├── script_store.py         # script/ listing, reading, creation, and deletion
 │   └── result_store.py         # result XML save/load and Nmap XML parsing
 ├── ui/
 │   ├── main_window.py          # menus, project tree, scan options/results pages
@@ -171,11 +192,12 @@ RustScan-GUI/
 - `Settings → Interface → Display mode` supports Day, Night, and Follow System. Theme changes take effect immediately and are persisted.
 - `Settings → Nmap Support` configures the Nmap executable path and persists it to `config.ini`.
 - `Edit → Main Interface` returns to the sidebar and workspace; `Ctrl+1` is also available.
-- `Scripts → Manage Scripts` opens the script-management page, listing scripts from `script/` on the left and showing the selected script on the right.
+- `Scripts → Manage Scripts` opens the script-management page, listing scripts from `script/` on the left and showing the selected script on the right. Right-click a script to open it in Explorer or choose **Delete Script**; after confirmation, the local script file is removed and the scan script selector is refreshed.
 - `Scripts → Add Script` opens a dialog. Enter a script name and content, then save with the green **Confirm** button.
 - Language configuration is stored in `config.ini` in the program directory, read at startup, and updated when the language changes.
 - `File → New Project`: creates a project folder under `project/` and adds a top-level item to the sidebar.
 - `File → New Scan`: creates a scan subfolder inside the selected project. If no project is selected, the application prompts the user to select one first.
+- Scan options support address and port files (TXT/CSV), automatic address/port pairing, and Sniper/Pitchfork scan modes.
 - Duplicate names automatically receive a numeric suffix. Projects and scans can be renamed from their context menus.
 - Renaming also moves the local folder. If the source folder is missing, it is recreated using the new name.
 - The context menus for projects and scans provide **Delete**. The confirmation dialog offers the option to delete the corresponding local folder and files at the same time. When unchecked, the item is only hidden from the sidebar and local content is left untouched.
@@ -183,6 +205,7 @@ RustScan-GUI/
 - The **Logs** tab on the right displays scan output and application state in real time.
 - A light-blue **Start Scan** button at the bottom of Scan Options runs `bin/rustscan.exe` asynchronously.
 - After a successful scan, the result is saved automatically to the current scan folder as `result-YYYY-MM-DD-HH-MM-SS.xml` and the result table is refreshed.
+- Pitchfork and other multi-job results show the target count in the active interface language, so English and Chinese modes stay consistent after switching languages.
 - Results are read from XML files in the local scan folder and displayed in a refreshable table.
 - Context menus can open the corresponding directory in File Explorer.
 - The sidebar can be closed with the `×` button in its upper-right corner or with `Ctrl+B`, and restored with `View → Show Sidebar`.
@@ -219,7 +242,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Console
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-The current 88 tests cover project creation/deduplication/renaming, menu actions, script storage and the script-management page, the Add Script dialog and file writing, the settings page, Nmap path configuration and persistence, returning to the main interface, default English and Simplified Chinese switching, interface settings and all three display modes, follow-system repainting, reading/writing/fallback behavior for language, display mode, and Nmap path in `config.ini`, XML language-pack key integrity, sidebar toggling, mouse-wheel scrolling on the scan options page, real-time log output and preservation across language changes, scan page tabs, port-mode placeholders, Yes/No option defaults and linked fields, form-state preservation across language changes, RustScan argument construction, output parsing, the start-scan workflow, and XML result save/load.
+The test suite covers project creation/deduplication/renaming, menu actions, script storage, creation, deletion, and the script-management page, the Add Script dialog and file writing, the settings page, Nmap path configuration and persistence, returning to the main interface, default English and Simplified Chinese switching, interface settings and all three display modes, follow-system repainting, reading/writing/fallback behavior for language, display mode, and Nmap path in `config.ini`, XML language-pack key integrity, sidebar toggling, mouse-wheel scrolling on the scan options page, real-time log output and preservation across language changes, scan page tabs, port-mode placeholders, Yes/No option defaults and linked fields, form-state preservation across language changes, TXT/CSV address and port import, invalid-row skipping, Sniper/Pitchfork planning, sequential multi-job scans, multi-job target localization, RustScan argument construction, output parsing, the start-scan workflow, and XML result save/load.
 
 ## Usage Notice
 

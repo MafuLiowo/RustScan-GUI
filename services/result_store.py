@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +17,10 @@ from config.settings import SCAN_INFO_FILENAME
 from models.result import PortResult
 
 DEFAULT_RESULT_FILENAME = "result.xml"
+_JOB_TARGET_RE = re.compile(
+    r"^\s*(\d+)\s*(?:组扫描任务|scan\s+jobs?)\s*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(slots=True)
@@ -26,6 +31,7 @@ class ResultDocument:
     target: str
     results: list[PortResult]
     error: str | None = None
+    job_count: int | None = None
 
 
 def save_results(
@@ -34,18 +40,19 @@ def save_results(
     *,
     target: str = "",
     filename: str = DEFAULT_RESULT_FILENAME,
+    job_count: int | None = None,
 ) -> Path:
     """把端口结果写入扫描文件夹中的 XML 文件。"""
     scan_dir = Path(scan_path)
     scan_dir.mkdir(parents=True, exist_ok=True)
 
-    root = ET.Element(
-        "scan_results",
-        {
-            "target": target,
-            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        },
-    )
+    attributes = {
+        "target": target,
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+    if job_count is not None and job_count > 1:
+        attributes["job_count"] = str(job_count)
+    root = ET.Element("scan_results", attributes)
     for result in results:
         ET.SubElement(
             root,
@@ -106,7 +113,12 @@ def _parse_file(path: Path) -> ResultDocument:
         results = _parse_generic(root)
 
     results.sort(key=_sort_key)
-    return ResultDocument(path=path, target=_target_name(root, results), results=results)
+    return ResultDocument(
+        path=path,
+        target=_target_name(root, results),
+        results=results,
+        job_count=_job_count(root),
+    )
 
 
 def _parse_nmap(root: ET.Element) -> list[PortResult]:
@@ -199,3 +211,20 @@ def _target_name(root: ET.Element, results: list[PortResult]) -> str:
     if len(addresses) > 1:
         return f"{len(addresses)} 个主机"
     return ""
+
+
+def _job_count(root: ET.Element) -> int | None:
+    value = root.get("job_count")
+    if value:
+        try:
+            count = int(value)
+        except ValueError:
+            count = 0
+        if count > 1:
+            return count
+
+    target = root.get("target") or ""
+    match = _JOB_TARGET_RE.match(target)
+    if match:
+        return int(match.group(1))
+    return None

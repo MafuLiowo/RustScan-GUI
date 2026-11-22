@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
+import csv
 import platform
 import re
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -36,6 +38,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -82,8 +85,23 @@ from config.settings import (
 from core.command_builder import build_rustscan_args
 from core.output_parser import parse_rustscan_output
 from core.rustscan_runner import RustscanRunner
+from core.scan_planner import (
+    ATTACK_PITCHFORK,
+    ATTACK_SNIPER,
+    ATTACK_TYPES,
+    ScanJob,
+    build_scan_jobs,
+)
 from models.project import ProjectNode, ScanNode
+from models.result import PortResult
 from models.scan_options import ScanOptions
+from services.address_file import (
+    AddressColumnNotFoundError,
+    AddressFileError,
+    EmptyAddressFileError,
+    UnsupportedAddressFileError,
+)
+from services.address_port_file import load_address_file
 from services.app_config import (
     read_display_mode,
     read_language,
@@ -100,6 +118,13 @@ from services.project_store import (
 )
 from services.result_store import ResultDocument, load_result_documents, save_results
 from services.scan_info_store import load_scan_form, save_scan_form
+from services.port_file import (
+    EmptyPortFileError,
+    PortColumnNotFoundError,
+    PortFileError,
+    UnsupportedPortFileError,
+    load_ports,
+)
 from services.script_store import (
     InvalidScriptNameError,
     ScriptExistsError,
@@ -115,6 +140,7 @@ KIND_SCAN = "scan"
 
 PORT_MODE_PORTS = "ports"
 PORT_MODE_RANGE = "range"
+PORT_MODE_FILE = "file"
 RESULT_COLUMN_KEYS = (
     "results.column_address",
     "results.column_port",
@@ -169,6 +195,13 @@ class MainWindow(QMainWindow):
         self._active_scan_path: Path | None = None
         self._active_scan_target = ""
         self._active_scan_protocol = "tcp"
+        self._scan_jobs: list[ScanJob] = []
+        self._scan_job_index = 0
+        self._scan_base_options: ScanOptions | None = None
+        self._scan_executable: Path | None = None
+        self._scan_results: list[PortResult] = []
+        self._scan_target_summary = ""
+        self._scan_path: Path | None = None
 
         self._runner = RustscanRunner(self, nmap_path=self._nmap_path)
         self._runner.finished.connect(self._on_scan_finished)
@@ -894,6 +927,11 @@ class MainWindow(QMainWindow):
                 name
             )
         )
+        menu.addSeparator()
+        delete_action = menu.addAction(self._t("context.delete_script"))
+        delete_action.triggered.connect(
+            lambda _checked=False, name=item.text(): self._delete_script(name)
+        )
         return menu
 
     def _open_script_in_explorer(self, name: str) -> None:
@@ -913,6 +951,31 @@ class MainWindow(QMainWindow):
                 self._t("dialog.open_failed"),
                 self._t("dialog.cannot_open_folder", path=folder),
             )
+
+    def _delete_script(self, name: str) -> None:
+        answer = QMessageBox.question(
+            self,
+            self._t("context.delete_script"),
+            self._t("dialog.delete_script_body", name=name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            self._script_store.delete_script(name)
+        except (OSError, InvalidScriptNameError) as exc:
+            QMessageBox.critical(
+                self,
+                self._t("dialog.delete_failed"),
+                self._t("dialog.cannot_delete_script", error=exc),
+            )
+            return
+
+        self._refresh_script_list()
+        self._refresh_scan_script_combo()
+        self._set_status(self._t("status.script_deleted", name=name), 5000)
 
     def _build_add_script_dialog(
         self,
@@ -1043,6 +1106,33 @@ class MainWindow(QMainWindow):
         form.addWidget(self._address_edit)
 
         form.addSpacing(8)
+        self._address_file_mode = self._build_yes_no_combo()
+        form.addLayout(
+            self._build_combo_row(
+                self._t("scan.import_address_label"),
+                self._address_file_mode,
+            )
+        )
+        address_file_row = QHBoxLayout()
+        address_file_row.setSpacing(10)
+        self._address_file_edit = QLineEdit()
+        self._address_file_edit.setPlaceholderText(
+            self._t("scan.import_address_placeholder")
+        )
+        self._address_file_edit.setEnabled(False)
+        self._address_file_button = QPushButton(self._t("scan.choose_file"))
+        self._address_file_button.setMinimumWidth(90)
+        self._address_file_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._address_file_button.setEnabled(False)
+        self._address_file_mode.currentIndexChanged.connect(
+            self._on_address_file_mode_changed
+        )
+        self._address_file_button.clicked.connect(self._choose_address_file)
+        address_file_row.addWidget(self._address_file_edit, 1)
+        address_file_row.addWidget(self._address_file_button)
+        form.addLayout(address_file_row)
+
+        form.addSpacing(8)
         form.addLayout(self._build_label_row(self._t("scan.exclude_ip_label")))
         exclude_ip_row = QHBoxLayout()
         exclude_ip_row.setSpacing(10)
@@ -1066,13 +1156,41 @@ class MainWindow(QMainWindow):
         self._port_mode = QComboBox()
         self._port_mode.addItem(self._t("scan.port_mode_ports"), PORT_MODE_PORTS)
         self._port_mode.addItem(self._t("scan.port_mode_range"), PORT_MODE_RANGE)
-        self._port_mode.setFixedWidth(110)
+        self._port_mode.addItem(self._t("scan.port_mode_file"), PORT_MODE_FILE)
+        self._port_mode.setFixedWidth(130)
         self._ports_edit = QLineEdit()
         self._ports_edit.setPlaceholderText(self._t("scan.ports_placeholder_ports"))
+        self._ports_file_button = QPushButton(self._t("scan.choose_file"))
+        self._ports_file_button.setMinimumWidth(90)
+        self._ports_file_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ports_file_button.setEnabled(False)
         self._port_mode.currentIndexChanged.connect(self._on_port_mode_changed)
+        self._ports_file_button.clicked.connect(self._choose_port_file)
         mode_row.addWidget(self._port_mode)
         mode_row.addWidget(self._ports_edit, 1)
+        mode_row.addWidget(self._ports_file_button)
         form.addLayout(mode_row)
+
+        self._attack_type_widget = QWidget()
+        attack_row = QHBoxLayout(self._attack_type_widget)
+        attack_row.setContentsMargins(0, 0, 0, 0)
+        attack_row.setSpacing(10)
+        attack_label = QLabel(self._t("scan.attack_type_label"))
+        attack_label.setObjectName("FieldLabel")
+        self._attack_type_combo = QComboBox()
+        self._attack_type_combo.addItem(
+            self._t("scan.attack_sniper"),
+            ATTACK_SNIPER,
+        )
+        self._attack_type_combo.addItem(
+            self._t("scan.attack_pitchfork"),
+            ATTACK_PITCHFORK,
+        )
+        attack_row.addWidget(attack_label)
+        attack_row.addStretch(1)
+        attack_row.addWidget(self._attack_type_combo)
+        self._attack_type_widget.setVisible(False)
+        form.addWidget(self._attack_type_widget)
 
         form.addSpacing(8)
         form.addLayout(self._build_label_row(self._t("scan.exclude_ports_label")))
@@ -1172,11 +1290,17 @@ class MainWindow(QMainWindow):
         self._result_file_combo = QComboBox()
         self._result_file_combo.setMinimumWidth(220)
         self._result_file_combo.currentIndexChanged.connect(self._on_result_file_changed)
-        refresh_button = QPushButton(self._t("results.refresh"))
-        refresh_button.clicked.connect(self._reload_results)
+        self._refresh_results_button = QPushButton(self._t("results.refresh"))
+        self._refresh_results_button.clicked.connect(self._reload_results)
+        self._export_csv_button = QPushButton(self._t("results.export_csv"))
+        self._export_csv_button.setObjectName("SuccessButton")
+        self._export_csv_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._export_csv_button.clicked.connect(self._export_current_results_csv)
         controls.addWidget(label)
         controls.addWidget(self._result_file_combo, 1)
-        controls.addWidget(refresh_button)
+        controls.addWidget(self._refresh_results_button)
+        controls.addWidget(self._export_csv_button)
+        self._result_controls = controls
         layout.addLayout(controls)
 
         self._result_hint = QLabel()
@@ -1622,10 +1746,13 @@ class MainWindow(QMainWindow):
             return
         values: dict[str, object] = {
             "address": self._address_edit.text(),
+            "address_file_mode": self._combo_value(self._address_file_mode),
+            "address_file": self._address_file_edit.text(),
             "exclude_ip_mode": self._combo_value(self._exclude_ip_mode),
             "exclude_ips": self._exclude_ip_edit.text(),
             "mode": self._port_mode.currentData(),
             "ports": self._ports_edit.text(),
+            "attack_type": str(self._attack_type_combo.currentData()),
             "exclude_mode": self._combo_value(self._exclude_mode),
             "exclude_ports": self._exclude_ports_edit.text(),
             "ignore_config": self._combo_value(self._ignore_config_combo),
@@ -1654,12 +1781,24 @@ class MainWindow(QMainWindow):
                 self._form_cache[str(scan.path)] = cached
         values = cached or {}
         mode = values.get("mode", PORT_MODE_PORTS)
-        if mode not in {PORT_MODE_PORTS, PORT_MODE_RANGE}:
+        if mode not in {PORT_MODE_PORTS, PORT_MODE_RANGE, PORT_MODE_FILE}:
             mode = PORT_MODE_PORTS
         self._address_edit.setText(values.get("address", ""))
+        self._set_yes_no_combo(
+            self._address_file_mode, values.get("address_file_mode", False)
+        )
+        self._address_file_edit.setText(str(values.get("address_file", "")))
+        self._update_address_file_enabled(
+            bool(self._combo_value(self._address_file_mode))
+        )
         self._set_combo_data(self._port_mode, mode)
-        self._update_port_placeholder(mode)
+        self._update_port_mode_controls(mode)
         self._ports_edit.setText(values.get("ports", ""))
+        attack_type = str(values.get("attack_type", ATTACK_SNIPER))
+        if attack_type not in ATTACK_TYPES:
+            attack_type = ATTACK_SNIPER
+        self._set_combo_data(self._attack_type_combo, attack_type)
+        self._update_attack_type_visibility()
         self._set_yes_no_combo(
             self._exclude_ip_mode, values.get("exclude_ip_mode", False)
         )
@@ -1703,12 +1842,50 @@ class MainWindow(QMainWindow):
         selected = value if isinstance(value, bool) else False
         cls._set_combo_data(combo, selected)
 
+    @staticmethod
+    def _split_addresses(value: str) -> list[str]:
+        addresses: list[str] = []
+        seen: set[str] = set()
+        for part in re.split(r"[,\n;]+", value):
+            address = part.strip()
+            key = address.casefold()
+            if not address or key in seen:
+                continue
+            seen.add(key)
+            addresses.append(address)
+        return addresses
+
+    @classmethod
+    def _merge_addresses(cls, values: list[str]) -> str:
+        merged: list[str] = []
+        for value in values:
+            merged.extend(cls._split_addresses(value))
+        return ",".join(merged)
+
+    def _apply_paired_address_file(self, path: str, count: int) -> None:
+        self._set_combo_data(self._port_mode, PORT_MODE_FILE)
+        self._update_port_mode_controls(PORT_MODE_FILE)
+        self._ports_edit.setText(path)
+        self._set_combo_data(self._attack_type_combo, ATTACK_PITCHFORK)
+        self._update_attack_type_visibility()
+        self._append_log(
+            "INFO",
+            self._t("log.auto_address_port_mode", count=count),
+        )
+
     def _on_port_mode_changed(self, _index: int) -> None:
         self._ports_edit.clear()
-        self._update_port_placeholder(self._port_mode.currentData())
+        self._update_port_mode_controls(self._port_mode.currentData())
+        self._update_attack_type_visibility()
 
-    def _update_port_placeholder(self, mode: str) -> None:
-        if mode == PORT_MODE_RANGE:
+    def _update_port_mode_controls(self, mode: str) -> None:
+        is_file = mode == PORT_MODE_FILE
+        self._ports_file_button.setEnabled(is_file)
+        if is_file:
+            self._ports_edit.setPlaceholderText(
+                self._t("scan.ports_placeholder_file")
+            )
+        elif mode == PORT_MODE_RANGE:
             self._ports_edit.setPlaceholderText(
                 self._t("scan.ports_placeholder_range")
             )
@@ -1716,6 +1893,158 @@ class MainWindow(QMainWindow):
             self._ports_edit.setPlaceholderText(
                 self._t("scan.ports_placeholder_ports")
             )
+
+    def _on_address_file_mode_changed(self, _index: int) -> None:
+        enabled = bool(self._address_file_mode.currentData())
+        self._update_address_file_enabled(enabled)
+        self._update_attack_type_visibility()
+        if enabled:
+            self._address_file_edit.setFocus()
+        else:
+            self._address_edit.setFocus()
+
+    def _update_address_file_enabled(self, enabled: bool) -> None:
+        self._address_edit.setEnabled(not enabled)
+        self._address_file_edit.setEnabled(enabled)
+        self._address_file_button.setEnabled(enabled)
+
+    def _update_attack_type_visibility(self) -> None:
+        visible = (
+            bool(self._address_file_mode.currentData())
+            and self._port_mode.currentData() == PORT_MODE_FILE
+        )
+        self._attack_type_widget.setVisible(visible)
+
+    def _choose_address_file(self) -> None:
+        current = self._address_file_edit.text().strip()
+        start_dir = (
+            str(Path(current).parent)
+            if current and Path(current).parent.is_dir()
+            else str(Path.home())
+        )
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            self._t("dialog.choose_address_file"),
+            start_dir,
+            self._t("dialog.address_file_filter"),
+        )
+        if not path:
+            return
+
+        self._address_file_edit.setText(path)
+        try:
+            data = load_address_file(path)
+        except OSError as exc:
+            message = self._t("dialog.address_file_read_failed", error=exc)
+            self._append_log("ERROR", message)
+            QMessageBox.critical(
+                self,
+                self._t("dialog.address_file_failed"),
+                message,
+            )
+            self._address_file_edit.setFocus()
+            return
+        except AddressFileError as exc:
+            message = self._address_file_error_message(exc)
+            self._append_log("WARN", message)
+            QMessageBox.warning(
+                self,
+                self._t("dialog.address_file_failed"),
+                message,
+            )
+            self._address_file_edit.setFocus()
+            return
+
+        if data.has_ports:
+            self._set_combo_data(self._port_mode, PORT_MODE_FILE)
+            self._update_port_mode_controls(PORT_MODE_FILE)
+            self._ports_edit.setText(path)
+            self._set_combo_data(self._attack_type_combo, ATTACK_PITCHFORK)
+            self._update_attack_type_visibility()
+            self._set_status(
+                self._t(
+                    "status.address_port_file_loaded",
+                    count=len(data.pairs),
+                    name=Path(path).name,
+                ),
+                5000,
+            )
+        else:
+            self._set_status(
+                self._t(
+                    "status.address_file_loaded",
+                    count=len(data.addresses),
+                    name=Path(path).name,
+                ),
+                5000,
+            )
+
+    def _choose_port_file(self) -> None:
+        current = self._ports_edit.text().strip()
+        start_dir = (
+            str(Path(current).parent)
+            if current and Path(current).parent.is_dir()
+            else str(Path.home())
+        )
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            self._t("dialog.choose_port_file"),
+            start_dir,
+            self._t("dialog.port_file_filter"),
+        )
+        if not path:
+            return
+
+        self._ports_edit.setText(path)
+        try:
+            ports = load_ports(path)
+        except OSError as exc:
+            message = self._t("dialog.port_file_read_failed", error=exc)
+            self._append_log("ERROR", message)
+            QMessageBox.critical(
+                self,
+                self._t("dialog.port_file_failed"),
+                message,
+            )
+            self._ports_edit.setFocus()
+            return
+        except PortFileError as exc:
+            message = self._port_file_error_message(exc)
+            self._append_log("WARN", message)
+            QMessageBox.warning(
+                self,
+                self._t("dialog.port_file_failed"),
+                message,
+            )
+            self._ports_edit.setFocus()
+            return
+
+        self._set_status(
+            self._t(
+                "status.port_file_loaded",
+                count=len(ports),
+                name=Path(path).name,
+            ),
+            5000,
+        )
+
+    def _address_file_error_message(self, error: AddressFileError) -> str:
+        if isinstance(error, UnsupportedAddressFileError):
+            return self._t("dialog.address_file_unsupported")
+        if isinstance(error, AddressColumnNotFoundError):
+            return self._t("dialog.address_file_no_column")
+        if isinstance(error, EmptyAddressFileError):
+            return self._t("dialog.address_file_empty")
+        return self._t("dialog.address_file_read_failed", error=error)
+
+    def _port_file_error_message(self, error: PortFileError) -> str:
+        if isinstance(error, UnsupportedPortFileError):
+            return self._t("dialog.port_file_unsupported")
+        if isinstance(error, PortColumnNotFoundError):
+            return self._t("dialog.port_file_no_column")
+        if isinstance(error, EmptyPortFileError):
+            return self._t("dialog.port_file_empty")
+        return self._t("dialog.port_file_read_failed", error=error)
 
     def _on_exclude_ip_mode_changed(self, _index: int) -> None:
         enabled = bool(self._exclude_ip_mode.currentData())
@@ -1792,15 +2121,65 @@ class MainWindow(QMainWindow):
         if self._runner.is_running or self._current_scan is None:
             return
 
-        address = self._address_edit.text().strip()
-        if not address:
+        address_mode = bool(self._address_file_mode.currentData())
+        pairs: tuple[tuple[str, int], ...] = ()
+        if address_mode:
+            address_file = self._address_file_edit.text().strip()
+            if not address_file:
+                message = self._t("dialog.address_file_required")
+                self._append_log("WARN", message)
+                QMessageBox.warning(
+                    self,
+                    self._t("dialog.cannot_start_scan"),
+                    message,
+                )
+                self._address_file_edit.setFocus()
+                return
+            try:
+                data = load_address_file(address_file)
+            except OSError as exc:
+                message = self._t("dialog.address_file_read_failed", error=exc)
+                self._append_log("ERROR", message)
+                QMessageBox.critical(
+                    self,
+                    self._t("dialog.cannot_start_scan"),
+                    message,
+                )
+                self._address_file_edit.setFocus()
+                return
+            except AddressFileError as exc:
+                message = self._address_file_error_message(exc)
+                self._append_log("WARN", message)
+                QMessageBox.warning(
+                    self,
+                    self._t("dialog.cannot_start_scan"),
+                    message,
+                )
+                self._address_file_edit.setFocus()
+                return
+            addresses = list(data.addresses)
+            if data.has_ports:
+                pairs = data.pairs
+                already_using_file = (
+                    self._port_mode.currentData() == PORT_MODE_FILE
+                    and Path(self._ports_edit.text().strip()) == Path(address_file)
+                )
+                if not already_using_file:
+                    self._apply_paired_address_file(address_file, len(pairs))
+        else:
+            addresses = self._split_addresses(self._address_edit.text())
+
+        if not addresses:
             self._append_log("WARN", self._t("dialog.address_required"))
             QMessageBox.warning(
                 self,
                 self._t("dialog.cannot_start_scan"),
                 self._t("dialog.address_required"),
             )
-            self._address_edit.setFocus()
+            if address_mode:
+                self._address_file_edit.setFocus()
+            else:
+                self._address_edit.setFocus()
             return
 
         use_script = bool(self._use_script_combo.currentData())
@@ -1830,12 +2209,75 @@ class MainWindow(QMainWindow):
             )
             return
 
-        ports_text = self._ports_edit.text().strip()
-        use_range = self._port_mode.currentData() == PORT_MODE_RANGE
+        port_mode = self._port_mode.currentData()
+        imported_ports: list[int] = []
+        ports_text = ""
+        port_range = ""
+        if not pairs:
+            if port_mode == PORT_MODE_FILE:
+                port_file = self._ports_edit.text().strip()
+                if not port_file:
+                    message = self._t("dialog.port_file_required")
+                    self._append_log("WARN", message)
+                    QMessageBox.warning(
+                        self,
+                        self._t("dialog.cannot_start_scan"),
+                        message,
+                    )
+                    self._ports_edit.setFocus()
+                    return
+                try:
+                    imported_ports = load_ports(port_file)
+                except OSError as exc:
+                    message = self._t("dialog.port_file_read_failed", error=exc)
+                    self._append_log("ERROR", message)
+                    QMessageBox.critical(
+                        self,
+                        self._t("dialog.cannot_start_scan"),
+                        message,
+                    )
+                    self._ports_edit.setFocus()
+                    return
+                except PortFileError as exc:
+                    message = self._port_file_error_message(exc)
+                    self._append_log("WARN", message)
+                    QMessageBox.warning(
+                        self,
+                        self._t("dialog.cannot_start_scan"),
+                        message,
+                    )
+                    self._ports_edit.setFocus()
+                    return
+            elif port_mode == PORT_MODE_RANGE:
+                port_range = self._ports_edit.text().strip()
+            else:
+                ports_text = self._ports_edit.text().strip()
+
+        attack_type = (
+            str(self._attack_type_combo.currentData())
+            if address_mode and port_mode == PORT_MODE_FILE
+            else ATTACK_SNIPER
+        )
+        if attack_type not in ATTACK_TYPES:
+            attack_type = ATTACK_SNIPER
+        jobs = build_scan_jobs(
+            addresses,
+            pairs=pairs,
+            imported_ports=imported_ports,
+            port_text=ports_text,
+            port_range=port_range,
+            attack_type=attack_type,
+        )
+        if not jobs:
+            self._set_status(
+                self._t("status.no_valid_scan_targets"),
+                8000,
+                level="WARN",
+            )
+            return
+
         options = ScanOptions(
-            address=address,
-            ports="" if use_range else ports_text,
-            port_range=ports_text if use_range else "",
+            address=",".join(addresses),
             exclude_addresses=(
                 self._exclude_ip_edit.text().strip()
                 if bool(self._exclude_ip_mode.currentData())
@@ -1870,33 +2312,72 @@ class MainWindow(QMainWindow):
             return
 
         self._remember_scan_form()
-        self._active_scan_path = scan_path
-        self._active_scan_target = address
+        self._scan_jobs = jobs
+        self._scan_job_index = 0
+        self._scan_base_options = options
+        self._scan_executable = executable
+        self._scan_results = []
+        self._scan_path = scan_path
+        self._scan_target_summary = (
+            jobs[0].address
+            if len(jobs) == 1
+            else self._t("status.scan_targets", count=len(jobs))
+        )
         self._active_scan_protocol = "udp" if options.udp else "tcp"
-        arguments = build_rustscan_args(options)
         self._flush_scan_output()
         self._start_button.setEnabled(False)
-        self._set_status(self._t("status.scanning", target=address))
+        self._start_next_scan_job()
+
+    def _start_next_scan_job(self) -> None:
+        if (
+            self._scan_base_options is None
+            or self._scan_executable is None
+            or self._scan_path is None
+            or self._scan_job_index >= len(self._scan_jobs)
+        ):
+            return
+
+        job = self._scan_jobs[self._scan_job_index]
+        options = replace(
+            self._scan_base_options,
+            address=job.address,
+            ports=job.ports,
+            port_range=job.port_range,
+        )
+        arguments = build_rustscan_args(options)
+        self._active_scan_path = self._scan_path
+        self._active_scan_target = job.address
+        if len(self._scan_jobs) > 1:
+            self._set_status(
+                self._t(
+                    "status.scanning_job",
+                    current=self._scan_job_index + 1,
+                    total=len(self._scan_jobs),
+                    target=job.address,
+                )
+            )
+        else:
+            self._set_status(self._t("status.scanning", target=job.address))
         self._append_log(
             "INFO",
             self._t(
                 "log.scan_command",
-                command=f"{executable.name} {' '.join(arguments)}".strip(),
+                command=(
+                    f"{self._scan_executable.name} {' '.join(arguments)}".strip()
+                ),
             ),
         )
         self._runner.start(
-            executable,
+            self._scan_executable,
             arguments,
-            scan_path,
+            self._scan_path,
         )
 
     def _on_scan_finished(self, exit_code: int, stdout: str, stderr: str) -> None:
         self._flush_scan_output()
-        self._start_button.setEnabled(True)
-        scan_path = self._active_scan_path
+        scan_path = self._scan_path
         target = self._active_scan_target
         protocol = self._active_scan_protocol
-        self._active_scan_path = None
 
         if exit_code != 0:
             details = (stderr or stdout).strip()
@@ -1904,6 +2385,7 @@ class MainWindow(QMainWindow):
                 details = details[:4000] + "\n…"
             if not details:
                 details = self._t("dialog.scan_no_details")
+            self._reset_scan_queue()
             QMessageBox.critical(
                 self,
                 self._t("dialog.scan_failed"),
@@ -1921,6 +2403,7 @@ class MainWindow(QMainWindow):
             return
 
         if scan_path is None:
+            self._reset_scan_queue()
             self._set_status(
                 self._t("status.scan_no_scan_dir"),
                 8000,
@@ -1933,15 +2416,25 @@ class MainWindow(QMainWindow):
             protocol=protocol,
             target=target or "",
         )
+        self._scan_results.extend(results)
+        self._scan_job_index += 1
+        if self._scan_job_index < len(self._scan_jobs):
+            self._start_next_scan_job()
+            return
+
+        final_results = self._merge_port_results(self._scan_results)
+        target_summary = self._scan_target_summary
         result_filename = datetime.now().strftime("result-%Y-%m-%d-%H-%M-%S.xml")
         try:
             result_path = save_results(
                 scan_path,
-                results,
-                target=target,
+                final_results,
+                target=target_summary,
                 filename=result_filename,
+                job_count=len(self._scan_jobs) if len(self._scan_jobs) > 1 else None,
             )
         except OSError as exc:
+            self._reset_scan_queue()
             QMessageBox.critical(
                 self,
                 self._t("dialog.save_results_failed"),
@@ -1954,6 +2447,7 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._reset_scan_queue()
         self._result_cache.pop(str(scan_path), None)
         if self._current_scan is not None and self._current_scan.path == scan_path:
             self._refresh_results()
@@ -1962,7 +2456,7 @@ class MainWindow(QMainWindow):
         self._set_status(
             self._t(
                 "status.scan_completed",
-                count=len(results),
+                count=len(final_results),
                 path=result_path,
             ),
             10000,
@@ -1972,15 +2466,46 @@ class MainWindow(QMainWindow):
             self._t("dialog.scan_completed"),
             self._t(
                 "dialog.scan_completed_body",
-                target=target,
-                count=len(results),
+                target=target_summary,
+                count=len(final_results),
                 path=result_path,
             ),
         )
 
-    def _on_scan_failed_to_start(self, error: str) -> None:
+    def _reset_scan_queue(self) -> None:
+        self._scan_jobs = []
+        self._scan_job_index = 0
+        self._scan_base_options = None
+        self._scan_executable = None
+        self._scan_results = []
+        self._scan_path = None
         self._active_scan_path = None
+        self._active_scan_target = ""
+        self._scan_target_summary = ""
         self._start_button.setEnabled(True)
+
+    @staticmethod
+    def _merge_port_results(results: list[PortResult]) -> list[PortResult]:
+        unique: list[PortResult] = []
+        index_by_key: dict[tuple[str, str, str], int] = {}
+        for result in results:
+            key = (result.address, result.port, result.protocol)
+            existing_index = index_by_key.get(key)
+            if existing_index is None:
+                index_by_key[key] = len(unique)
+                unique.append(result)
+                continue
+            existing = unique[existing_index]
+            if result.service:
+                existing.service = result.service
+            if result.version:
+                existing.version = result.version
+            if result.state and not existing.state:
+                existing.state = result.state
+        return unique
+
+    def _on_scan_failed_to_start(self, error: str) -> None:
+        self._reset_scan_queue()
         QMessageBox.critical(
             self,
             self._t("dialog.scan_start_failed"),
@@ -1998,6 +2523,7 @@ class MainWindow(QMainWindow):
         self._result_file_combo.clear()
         self._result_file_combo.setEnabled(False)
         self._result_file_combo.blockSignals(False)
+        self._export_csv_button.setEnabled(False)
         self._result_table.setRowCount(0)
         self._result_table.setVisible(False)
         self._result_hint.setText(self._t("results.empty_hint"))
@@ -2025,6 +2551,7 @@ class MainWindow(QMainWindow):
         self._result_file_combo.blockSignals(False)
 
         if not documents:
+            self._export_csv_button.setEnabled(False)
             self._result_table.setRowCount(0)
             self._result_table.setVisible(False)
             self._result_hint.setText(self._t("results.empty_hint"))
@@ -2048,6 +2575,7 @@ class MainWindow(QMainWindow):
 
         document = self._result_documents[index]
         if document.error:
+            self._export_csv_button.setEnabled(False)
             self._result_table.setRowCount(0)
             self._result_table.setVisible(False)
             self._result_hint.setText(
@@ -2060,6 +2588,7 @@ class MainWindow(QMainWindow):
             return
 
         results = document.results
+        self._export_csv_button.setEnabled(bool(results))
         self._result_table.setRowCount(len(results))
         for row_index, result in enumerate(results):
             values = (
@@ -2077,11 +2606,12 @@ class MainWindow(QMainWindow):
 
         self._result_table.setVisible(bool(results))
         if results:
-            if document.target:
+            target = self._result_target_text(document)
+            if target:
                 hint = self._t(
                     "results.summary_with_target",
                     filename=document.path.name,
-                    target=document.target,
+                    target=target,
                     count=len(results),
                 )
             else:
@@ -2098,6 +2628,78 @@ class MainWindow(QMainWindow):
                     filename=document.path.name,
                 )
             )
+
+    def _result_target_text(self, document: ResultDocument) -> str:
+        if document.job_count and document.job_count > 1:
+            return self._t("status.scan_targets", count=document.job_count)
+        return document.target
+
+    def _export_current_results_csv(self) -> None:
+        index = self._result_file_combo.currentIndex()
+        if not 0 <= index < len(self._result_documents):
+            self._warn_no_results_to_export()
+            return
+
+        document = self._result_documents[index]
+        if document.error or not document.results:
+            self._warn_no_results_to_export()
+            return
+
+        default_path = document.path.with_suffix(".csv")
+        selected_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            self._t("results.export_dialog_title"),
+            str(default_path),
+            self._t("results.export_filter"),
+        )
+        if not selected_path:
+            return
+
+        csv_path = Path(selected_path)
+        if not csv_path.suffix:
+            csv_path = csv_path.with_suffix(".csv")
+        try:
+            with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow([self._t(key) for key in RESULT_COLUMN_KEYS])
+                for result in document.results:
+                    writer.writerow(
+                        (
+                            result.address,
+                            result.port,
+                            result.protocol,
+                            result.state,
+                            result.service,
+                            result.version,
+                        )
+                    )
+        except OSError as exc:
+            message = self._t("dialog.cannot_write_csv", error=exc)
+            self._append_log("ERROR", message)
+            QMessageBox.critical(
+                self,
+                self._t("dialog.csv_export_failed"),
+                message,
+            )
+            return
+
+        self._set_status(
+            self._t(
+                "status.csv_exported",
+                count=len(document.results),
+                path=csv_path,
+            ),
+            8000,
+        )
+
+    def _warn_no_results_to_export(self) -> None:
+        message = self._t("results.export_no_results")
+        self._append_log("WARN", message)
+        QMessageBox.warning(
+            self,
+            self._t("dialog.csv_export_failed"),
+            message,
+        )
 
     def _show_context_menu(self, position) -> None:
         item = self._tree.itemAt(position)

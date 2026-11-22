@@ -8,7 +8,8 @@ from pathlib import Path
 
 from config.settings import SCAN_INFO_FILENAME
 
-PORT_MODES = ("ports", "range")
+PORT_MODES = ("ports", "range", "file")
+ATTACK_TYPES = ("sniper", "pitchfork")
 
 
 def save_scan_form(
@@ -31,11 +32,23 @@ def save_scan_form(
     )
     ET.SubElement(root, "address").text = str(values.get("address", ""))
 
+    address_file = ET.SubElement(
+        root,
+        "address_file",
+        {"enabled": _bool_text(values.get("address_file_mode", False))},
+    )
+    address_file.text = str(values.get("address_file", ""))
+
     mode = str(values.get("mode", PORT_MODES[0]))
     if mode not in PORT_MODES:
         mode = PORT_MODES[0]
     ports_node = ET.SubElement(root, "ports", {"mode": mode})
     ports_node.text = str(values.get("ports", ""))
+
+    attack_type = str(values.get("attack_type", ATTACK_TYPES[0]))
+    if attack_type not in ATTACK_TYPES:
+        attack_type = ATTACK_TYPES[0]
+    ET.SubElement(root, "attack_type").text = attack_type
 
     exclude_ip = ET.SubElement(
         root,
@@ -92,13 +105,21 @@ def load_scan_form(
     if mode not in PORT_MODES:
         mode = PORT_MODES[0]
 
+    attack_type = _text(root.find("attack_type")) or ATTACK_TYPES[0]
+    if attack_type not in ATTACK_TYPES:
+        attack_type = ATTACK_TYPES[0]
+
     exclude_ip = root.find("exclude_ip")
     exclude_ports = root.find("exclude_ports")
     script = root.find("script")
+    address_file = root.find("address_file")
     return {
         "address": _text(root.find("address")),
+        "address_file_mode": _enabled(address_file),
+        "address_file": _text(address_file),
         "mode": mode,
         "ports": _text(ports_node),
+        "attack_type": attack_type,
         "exclude_ip_mode": _enabled(exclude_ip),
         "exclude_ips": _text(exclude_ip),
         "exclude_mode": _enabled(exclude_ports),
