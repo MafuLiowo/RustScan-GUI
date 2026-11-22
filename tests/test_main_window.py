@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import os
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
 )
@@ -164,7 +166,7 @@ class MainWindowProjectTests(unittest.TestCase):
 
         menu = self.window._build_script_context_menu(item)
         actions = [action.text() for action in menu.actions() if action.text()]
-        self.assertEqual(actions, ["Open in Explorer"])
+        self.assertEqual(actions, ["Open in Explorer", "Delete Script"])
 
         with patch.object(self.window, "_open_script_in_explorer") as opener:
             menu.actions()[0].trigger()
@@ -178,6 +180,25 @@ class MainWindowProjectTests(unittest.TestCase):
 
         folder = Path(open_url.call_args.args[0].toLocalFile())
         self.assertEqual(folder, self.script_store.root)
+
+    def test_script_context_menu_deletes_script_file(self) -> None:
+        self.script_store.write_script("demo.nse", "demo")
+        self.window._refresh_script_list()
+        item = self.window._script_list.item(0)
+        menu = self.window._build_script_context_menu(item)
+        delete_action = next(
+            action for action in menu.actions() if action.text() == "Delete Script"
+        )
+
+        with patch(
+            "ui.main_window.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            delete_action.trigger()
+
+        self.assertFalse((self.script_store.root / "demo.nse").exists())
+        self.assertEqual(self.window._script_list.count(), 0)
+        self.assertEqual(self.window._script_content.toPlainText(), "")
 
     def test_window_title_and_about_logo(self) -> None:
         self.assertEqual(
@@ -307,6 +328,14 @@ class MainWindowProjectTests(unittest.TestCase):
         self.assertEqual(project_item.text(0), "新建项目")
         self.assertEqual(project_item.child(0).text(0), "新扫描")
         self.assertTrue((self.store.root / "新建项目" / "新扫描").is_dir())
+        self.assertEqual(
+            [
+                self.window._attack_type_combo.itemText(index)
+                for index in range(self.window._attack_type_combo.count())
+            ],
+            ["Sniper扫描", "Pitchfork扫描"],
+        )
+        self.assertEqual(self.window._export_csv_button.text(), "导出为CSV格式")
 
     def test_interface_settings_switches_display_mode(self) -> None:
         self.window._show_settings_page()
@@ -524,7 +553,7 @@ class MainWindowProjectTests(unittest.TestCase):
         ]
         self.assertEqual(tabs, ["Scan Options", "Scan Results", "Logs"])
         labels = [label.text() for label in self.window._scan_page.findChildren(QLabel)]
-        self.assertIn("Scan address (CIDR, IP)", labels)
+        self.assertIn("Scan address (domain, CIDR, IP)", labels)
         self.assertIn("*", labels)
         self.assertIn("Add excluded IP addresses?", labels)
         self.assertIn("Add excluded ports?", labels)
@@ -613,6 +642,7 @@ class MainWindowProjectTests(unittest.TestCase):
         self.window._create_scan()
 
         for combo in (
+            self.window._address_file_mode,
             self.window._ignore_config_combo,
             self.window._udp_mode_combo,
             self.window._nmap_version_combo,
@@ -625,6 +655,16 @@ class MainWindowProjectTests(unittest.TestCase):
                 [combo.itemText(index) for index in range(combo.count())],
                 ["Yes", "No"],
             )
+
+        self.assertEqual(
+            self.window._address_file_edit.placeholderText(),
+            "Address file location",
+        )
+        self.assertFalse(self.window._address_file_edit.isEnabled())
+        self.assertFalse(self.window._address_file_button.isEnabled())
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.assertTrue(self.window._address_file_edit.isEnabled())
+        self.assertTrue(self.window._address_file_button.isEnabled())
 
         self.assertFalse(self.window._exclude_ip_edit.isEnabled())
         self.window._exclude_ip_mode.setCurrentText("Yes")
@@ -650,6 +690,327 @@ class MainWindowProjectTests(unittest.TestCase):
         self.window._nmap_version_combo.setCurrentText("No")
         self.assertFalse(self.window._nmap_extra_args_edit.isEnabled())
         self.assertFalse(self.window._scan_script_combo.isEnabled())
+
+    def test_choose_address_file_loads_txt_targets(self) -> None:
+        targets = Path(self._temp.name) / "targets.txt"
+        targets.write_text(
+            "127.0.0.1\nexample.com\n",
+            encoding="utf-8",
+        )
+        self.window._create_project()
+        self.window._create_scan()
+        self.window._address_file_mode.setCurrentText("Yes")
+
+        with patch(
+            "ui.main_window.QFileDialog.getOpenFileName",
+            return_value=(str(targets), ""),
+        ) as dialog:
+            self.window._choose_address_file()
+
+        dialog.assert_called_once()
+        self.assertEqual(dialog.call_args.args[1], "Select Address File")
+        self.assertEqual(
+            dialog.call_args.args[3],
+            "Address files (*.txt *.csv);;Text files (*.txt);;CSV files (*.csv)",
+        )
+        self.assertEqual(self.window._address_file_edit.text(), str(targets))
+        self.assertIn(
+            "Imported 2 addresses from targets.txt",
+            [entry[2] for entry in self.window._log_entries],
+        )
+
+    def test_start_scan_uses_addresses_from_imported_csv(self) -> None:
+        targets = Path(self._temp.name) / "targets.csv"
+        targets.write_text(
+            "name,ip,domain\n"
+            "first,192.168.1.10,one.example.com\n"
+            "second,192.168.1.11,two.example.com\n",
+            encoding="utf-8",
+        )
+        self.window._create_project()
+        self.window._create_scan()
+        submitted: dict[str, object] = {}
+
+        def fake_start(program, arguments, working_directory) -> None:
+            submitted["arguments"] = arguments
+
+        self.window._runner.start = fake_start
+        self.window._address_edit.clear()
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.window._address_file_edit.setText(str(targets))
+        self.window._ports_edit.setText("80")
+
+        self.window._start_scan()
+
+        self.assertEqual(
+            submitted["arguments"],
+            [
+                "-a",
+                "192.168.1.10,one.example.com,192.168.1.11,two.example.com",
+                "-p",
+                "80",
+                "-g",
+                "--no-banner",
+            ],
+        )
+
+    def test_address_import_disables_manual_address_input(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+
+        self.assertTrue(self.window._address_edit.isEnabled())
+        self.window._address_file_mode.setCurrentText("Yes")
+
+        self.assertFalse(self.window._address_edit.isEnabled())
+        self.assertTrue(self.window._address_file_edit.isEnabled())
+        labels = [label.text() for label in self.window._scan_page.findChildren(QLabel)]
+        self.assertIn("Import addresses from file (txt, csv)", labels)
+
+        self.window._address_file_mode.setCurrentText("No")
+        self.assertTrue(self.window._address_edit.isEnabled())
+        self.assertFalse(self.window._address_file_edit.isEnabled())
+
+    def test_port_file_mode_selects_and_loads_ports(self) -> None:
+        ports = Path(self._temp.name) / "ports.csv"
+        ports.write_text("port\n80\n443\n70000\n", encoding="utf-8")
+        self.window._create_project()
+        self.window._create_scan()
+        self.assertIn("File Import", [
+            self.window._port_mode.itemText(index)
+            for index in range(self.window._port_mode.count())
+        ])
+
+        self.window._port_mode.setCurrentText("File Import")
+        self.assertTrue(self.window._ports_file_button.isEnabled())
+        self.assertEqual(
+            self.window._ports_edit.placeholderText(),
+            "Port file location (0-65535)",
+        )
+
+        with patch(
+            "ui.main_window.QFileDialog.getOpenFileName",
+            return_value=(str(ports), ""),
+        ) as dialog:
+            self.window._choose_port_file()
+
+        dialog.assert_called_once()
+        self.assertEqual(dialog.call_args.args[1], "Select Port File")
+        self.assertEqual(
+            dialog.call_args.args[3],
+            "Port files (*.txt *.csv);;Text files (*.txt);;CSV files (*.csv)",
+        )
+        self.assertEqual(self.window._ports_edit.text(), str(ports))
+        self.assertIn(
+            "Imported 2 ports from ports.csv",
+            [entry[2] for entry in self.window._log_entries],
+        )
+
+        self.window._port_mode.setCurrentText("Range")
+        self.assertFalse(self.window._ports_file_button.isEnabled())
+        self.assertEqual(
+            self.window._ports_edit.placeholderText(),
+            "Range, e.g. 80-8080",
+        )
+
+    def test_attack_type_is_visible_only_for_two_imported_files(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+
+        self.assertTrue(self.window._attack_type_widget.isHidden())
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.assertTrue(self.window._attack_type_widget.isHidden())
+        self.window._port_mode.setCurrentText("File Import")
+        self.assertFalse(self.window._attack_type_widget.isHidden())
+        self.assertEqual(
+            self.window._attack_type_combo.currentData(),
+            "sniper",
+        )
+        self.assertEqual(
+            [
+                self.window._attack_type_combo.itemText(index)
+                for index in range(self.window._attack_type_combo.count())
+            ],
+            ["Sniper Scan", "Pitchfork Scan"],
+        )
+        self.window._port_mode.setCurrentText("Ports")
+        self.assertTrue(self.window._attack_type_widget.isHidden())
+
+    def test_address_file_with_ports_switches_to_pitchfork(self) -> None:
+        targets = Path(self._temp.name) / "paired.csv"
+        targets.write_text(
+            "domain,port\n"
+            "one.example.com,80\n"
+            "two.example.com,443\n",
+            encoding="utf-8",
+        )
+        self.window._create_project()
+        self.window._create_scan()
+        self.window._address_file_mode.setCurrentText("Yes")
+
+        with patch(
+            "ui.main_window.QFileDialog.getOpenFileName",
+            return_value=(str(targets), ""),
+        ):
+            self.window._choose_address_file()
+
+        self.assertEqual(self.window._port_mode.currentData(), "file")
+        self.assertEqual(self.window._ports_edit.text(), str(targets))
+        self.assertEqual(self.window._attack_type_combo.currentData(), "pitchfork")
+        self.assertFalse(self.window._attack_type_widget.isHidden())
+        self.assertTrue(self.window._ports_file_button.isEnabled())
+
+    def test_paired_address_file_can_be_changed_to_sniper(self) -> None:
+        targets = Path(self._temp.name) / "paired.csv"
+        targets.write_text(
+            "domain,port\n"
+            "one.example.com,80\n"
+            "two.example.com,443\n",
+            encoding="utf-8",
+        )
+        self.window._create_project()
+        self.window._create_scan()
+        submitted: dict[str, object] = {}
+
+        def fake_start(program, arguments, working_directory) -> None:
+            submitted["arguments"] = arguments
+
+        self.window._runner.start = fake_start
+        self.window._address_file_mode.setCurrentText("Yes")
+        with patch(
+            "ui.main_window.QFileDialog.getOpenFileName",
+            return_value=(str(targets), ""),
+        ):
+            self.window._choose_address_file()
+        self.window._attack_type_combo.setCurrentIndex(
+            self.window._attack_type_combo.findData("sniper")
+        )
+
+        self.window._start_scan()
+
+        self.assertEqual(
+            submitted["arguments"],
+            [
+                "-a",
+                "one.example.com,two.example.com",
+                "-p",
+                "80,443",
+                "-g",
+                "--no-banner",
+            ],
+        )
+        self.assertEqual(
+            self.window._attack_type_combo.currentData(),
+            "sniper",
+        )
+
+    def test_two_imported_files_can_run_sniper_attack(self) -> None:
+        targets = Path(self._temp.name) / "targets.txt"
+        targets.write_text("one.example.com\ntwo.example.com\n", encoding="utf-8")
+        ports = Path(self._temp.name) / "ports.txt"
+        ports.write_text("80\n443\n", encoding="utf-8")
+        self.window._create_project()
+        self.window._create_scan()
+        submitted: dict[str, object] = {}
+
+        def fake_start(program, arguments, working_directory) -> None:
+            submitted["arguments"] = arguments
+
+        self.window._runner.start = fake_start
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.window._address_file_edit.setText(str(targets))
+        self.window._port_mode.setCurrentText("File Import")
+        self.window._ports_edit.setText(str(ports))
+        self.window._attack_type_combo.setCurrentIndex(
+            self.window._attack_type_combo.findData("sniper")
+        )
+
+        self.window._start_scan()
+
+        self.assertEqual(
+            submitted["arguments"],
+            [
+                "-a",
+                "one.example.com,two.example.com",
+                "-p",
+                "80,443",
+                "-g",
+                "--no-banner",
+            ],
+        )
+        self.assertEqual(len(self.window._scan_jobs), 1)
+
+    def test_two_imported_files_can_run_pitchfork_attack(self) -> None:
+        targets = Path(self._temp.name) / "targets.txt"
+        targets.write_text("one.example.com\ntwo.example.com\n", encoding="utf-8")
+        ports = Path(self._temp.name) / "ports.txt"
+        ports.write_text("80\n443\n", encoding="utf-8")
+        self.window._create_project()
+        self.window._create_scan()
+        scan_path = self.store.root / "New Project" / "New Scan"
+        submitted: list[list[str]] = []
+
+        def fake_start(program, arguments, working_directory) -> None:
+            submitted.append(arguments)
+
+        self.window._runner.start = fake_start
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.window._address_file_edit.setText(str(targets))
+        self.window._port_mode.setCurrentText("File Import")
+        self.window._ports_edit.setText(str(ports))
+        self.window._attack_type_combo.setCurrentIndex(
+            self.window._attack_type_combo.findData("pitchfork")
+        )
+
+        self.window._start_scan()
+
+        self.assertEqual(
+            submitted,
+            [["-a", "one.example.com", "-p", "80", "-g", "--no-banner"]],
+        )
+        self.assertEqual(len(self.window._scan_jobs), 2)
+
+        with patch("ui.main_window.QMessageBox.information"):
+            self.window._on_scan_finished(
+                0,
+                "one.example.com -> [80]\n",
+                "",
+            )
+            self.assertEqual(
+                submitted[-1],
+                ["-a", "two.example.com", "-p", "443", "-g", "--no-banner"],
+            )
+            self.window._on_scan_finished(
+                0,
+                "two.example.com -> [443]\n",
+                "",
+            )
+
+        result_files = list(scan_path.glob("result-*.xml"))
+        self.assertEqual(len(result_files), 1)
+        self.assertEqual(self.window._result_table.rowCount(), 2)
+        self.assertEqual(
+            [self.window._result_table.item(row, 0).text() for row in range(2)],
+            ["one.example.com", "two.example.com"],
+        )
+
+    def test_multi_job_target_uses_current_interface_language(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+        scan = self.store.load()[0].scans[0]
+        save_results(
+            scan.path,
+            [PortResult("one.example.com", "80", "tcp", "open", "http", "")],
+            target="4 组扫描任务",
+            job_count=4,
+            filename="result-2026-11-22-14-30-00.xml",
+        )
+
+        self.window._show_scan_page(scan)
+        self.window._tabs.setCurrentIndex(1)
+        self.app.processEvents()
+
+        self.assertIn("Target: 4 scan jobs", self.window._result_hint.text())
+        self.assertNotIn("组扫描任务", self.window._result_hint.text())
 
     def test_start_scan_button_is_configured(self) -> None:
         self.window._create_project()
@@ -870,7 +1231,71 @@ class MainWindowProjectTests(unittest.TestCase):
         self.assertEqual(self.window._result_table.rowCount(), 0)
         self.assertTrue(self.window._result_table.isHidden())
         self.assertFalse(self.window._result_file_combo.isEnabled())
+        self.assertFalse(self.window._export_csv_button.isEnabled())
         self.assertIn("No scan results", self.window._result_hint.text())
+
+    def test_results_toolbar_exports_current_selection_to_csv(self) -> None:
+        self.window._create_project()
+        self.window._create_scan()
+        scan_path = self.store.root / "New Project" / "New Scan"
+        save_results(
+            scan_path,
+            [PortResult("127.0.0.1", "80", "tcp", "open", "http", "nginx")],
+            target="127.0.0.1",
+            filename="older.xml",
+        )
+        save_results(
+            scan_path,
+            [PortResult("127.0.0.2", "443", "tcp", "open", "https", "nginx 1.24")],
+            target="127.0.0.2",
+            filename="newer.xml",
+        )
+
+        self.window._tabs.setCurrentIndex(1)
+        self.app.processEvents()
+        selected_index = self.window._result_file_combo.findText("newer.xml")
+        self.assertGreaterEqual(selected_index, 0)
+        self.window._result_file_combo.setCurrentIndex(selected_index)
+
+        self.assertEqual(self.window._result_controls.count(), 4)
+        self.assertEqual(self.window._result_controls.stretch(1), 1)
+        self.assertEqual(self.window._export_csv_button.text(), "Export as CSV")
+        self.assertEqual(self.window._export_csv_button.objectName(), "SuccessButton")
+        self.assertTrue(self.window._export_csv_button.isEnabled())
+
+        csv_path = Path(self._temp.name) / "selected-results"
+        with patch(
+            "ui.main_window.QFileDialog.getSaveFileName",
+            return_value=(str(csv_path), ""),
+        ) as dialog:
+            self.window._export_current_results_csv()
+
+        dialog.assert_called_once()
+        self.assertEqual(dialog.call_args.args[1], "Export scan results as CSV")
+        self.assertEqual(
+            dialog.call_args.args[2],
+            str(scan_path / "newer.csv"),
+        )
+        self.assertEqual(dialog.call_args.args[3], "CSV files (*.csv)")
+        exported = Path(f"{csv_path}.csv")
+        self.assertTrue(exported.is_file())
+        self.assertEqual(exported.read_bytes()[:3], b"\xef\xbb\xbf")
+        with exported.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle))
+
+        self.assertEqual(
+            rows,
+            [
+                ["Address", "Port", "Protocol", "State", "Service", "Version"],
+                ["127.0.0.2", "443", "tcp", "open", "https", "nginx 1.24"],
+            ],
+        )
+        self.assertTrue(
+            any(
+                "Exported 1 results" in entry[2]
+                for entry in self.window._log_entries
+            )
+        )
 
     def test_results_tab_caches_documents_until_refreshed(self) -> None:
         self.window._create_project()
@@ -963,6 +1388,8 @@ class MainWindowProjectTests(unittest.TestCase):
         self.window._create_scan()
         scan_path = self.store.root / "New Project" / "New Scan"
         self.window._address_edit.setText("192.168.1.0/24")
+        self.window._address_file_mode.setCurrentText("Yes")
+        self.window._address_file_edit.setText("C:/targets.csv")
         self.window._port_mode.setCurrentText("Range")
         self.window._ports_edit.setText("1-2048")
         self.window._exclude_ip_mode.setCurrentText("Yes")
@@ -989,6 +1416,13 @@ class MainWindowProjectTests(unittest.TestCase):
 
         self.assertIs(self.window._stack.currentWidget(), self.window._scan_page)
         self.assertEqual(self.window._address_edit.text(), "192.168.1.0/24")
+        self.assertEqual(self.window._address_file_mode.currentText(), "Yes")
+        self.assertEqual(
+            self.window._address_file_edit.text(),
+            "C:/targets.csv",
+        )
+        self.assertTrue(self.window._address_file_edit.isEnabled())
+        self.assertTrue(self.window._address_file_button.isEnabled())
         self.assertEqual(self.window._port_mode.currentText(), "Range")
         self.assertEqual(self.window._ports_edit.text(), "1-2048")
         self.assertEqual(self.window._exclude_ip_mode.currentText(), "Yes")

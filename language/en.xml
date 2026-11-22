@@ -41,15 +41,23 @@
   <text key="scan.tab_options">Scan Options</text>
   <text key="scan.tab_results">Scan Results</text>
   <text key="scan.tab_logs">Logs</text>
-  <text key="scan.address_label">Scan address (CIDR, IP)</text>
+  <text key="scan.address_label">Scan address (domain, CIDR, IP)</text>
   <text key="scan.address_placeholder">For example: 192.168.1.0/24 or 127.0.0.1</text>
+  <text key="scan.import_address_label">Import addresses from file (txt, csv)</text>
+  <text key="scan.import_address_placeholder">Address file location</text>
+  <text key="scan.choose_file">Choose</text>
   <text key="scan.exclude_ip_label">Add excluded IP addresses?</text>
   <text key="scan.exclude_ip_placeholder">Excluded IP addresses</text>
   <text key="scan.ports_title">Scan ports</text>
   <text key="scan.port_mode_ports">Ports</text>
   <text key="scan.port_mode_range">Range</text>
+  <text key="scan.port_mode_file">File Import</text>
   <text key="scan.ports_placeholder_ports">Ports (comma separated, e.g. 80,8080)</text>
   <text key="scan.ports_placeholder_range">Range, e.g. 80-8080</text>
+  <text key="scan.ports_placeholder_file">Port file location (0-65535)</text>
+  <text key="scan.attack_type_label">Address and port scan type</text>
+  <text key="scan.attack_sniper">Sniper Scan</text>
+  <text key="scan.attack_pitchfork">Pitchfork Scan</text>
   <text key="scan.exclude_ports_label">Add excluded ports?</text>
   <text key="scan.exclude_ports_placeholder">Excluded ports (comma separated, e.g. 80,8080)</text>
   <text key="scan.ignore_config_label">Ignore configuration file?</text>
@@ -63,6 +71,10 @@
 
   <text key="results.file_label">Result file</text>
   <text key="results.refresh">Refresh</text>
+  <text key="results.export_csv">Export as CSV</text>
+  <text key="results.export_dialog_title">Export scan results as CSV</text>
+  <text key="results.export_filter">CSV files (*.csv)</text>
+  <text key="results.export_no_results">There are no results to export in the current selection.</text>
   <text key="results.empty_hint">No scan results yet. Place an XML result file in this scan folder and click Refresh.</text>
   <text key="results.parse_error">{filename} could not be parsed: {error}</text>
   <text key="results.summary">{filename}  ·  Results: {count}</text>
@@ -82,6 +94,7 @@
   <text key="context.rename">Rename</text>
   <text key="context.open_explorer">Open in Explorer</text>
   <text key="context.delete">Delete</text>
+  <text key="context.delete_script">Delete Script</text>
   <text key="common.yes">Yes</text>
   <text key="common.no">No</text>
 
@@ -96,12 +109,20 @@
   <text key="status.renamed">Renamed: {old_name} → {new_name}</text>
   <text key="status.deleted">Deleted: {name}</text>
   <text key="status.script_added">Script added: {name}</text>
+  <text key="status.script_deleted">Script deleted: {name}</text>
+  <text key="status.address_file_loaded">Imported {count} addresses from {name}</text>
+  <text key="status.address_port_file_loaded">Imported {count} address/port pairs from {name}; Pitchfork Scan is enabled</text>
+  <text key="status.port_file_loaded">Imported {count} ports from {name}</text>
+  <text key="status.no_valid_scan_targets">No valid scan targets or ports were found.</text>
+  <text key="status.scan_targets">{count} scan jobs</text>
+  <text key="status.scanning_job">Scanning job {current}/{total}: {target}…</text>
   <text key="status.scanning">Scanning {target}…</text>
   <text key="status.scan_failed_code">Scan failed (exit code {code})</text>
   <text key="status.scan_no_scan_dir">Scan completed, but there is no scan folder for saving results.</text>
   <text key="status.scan_save_failed">Scan completed, but saving the result failed.</text>
   <text key="status.scan_completed">Scan completed: {count} open ports  ·  {path}</text>
   <text key="status.scan_start_failed">Failed to start the scan</text>
+  <text key="status.csv_exported">Exported {count} results: {path}</text>
   <text key="status.language_changed">Language changed: {language}</text>
   <text key="status.config_save_failed">Language changed, but config.ini could not be saved: {error}</text>
   <text key="status.display_mode_changed">Display mode changed: {mode}</text>
@@ -112,6 +133,7 @@
   <text key="log.application_started">Application started (v{version}).</text>
   <text key="log.scan_command">RustScan command: {command}</text>
   <text key="log.scan_info_save_failed">Could not save scan_info.xml: {error}</text>
+  <text key="log.auto_address_port_mode">The address file includes ports. Switched to file import and Pitchfork Scan for {count} address/port pairs.</text>
 
   <text key="dialog.new_project_failed">Failed to create project</text>
   <text key="dialog.cannot_create_project">Could not create the project folder:
@@ -123,6 +145,24 @@
 {error}</text>
   <text key="dialog.cannot_start_scan">Could not start scan</text>
   <text key="dialog.address_required">Enter a scan address.</text>
+  <text key="dialog.choose_address_file">Select Address File</text>
+  <text key="dialog.address_file_filter">Address files (*.txt *.csv);;Text files (*.txt);;CSV files (*.csv)</text>
+  <text key="dialog.address_file_failed">Address file error</text>
+  <text key="dialog.address_file_required">Select an address file to import.</text>
+  <text key="dialog.address_file_unsupported">Only .txt and .csv files are supported.</text>
+  <text key="dialog.address_file_no_column">No IP or domain column was found in the CSV file.</text>
+  <text key="dialog.address_file_empty">No IP addresses or domains were found in the address file.</text>
+  <text key="dialog.address_file_read_failed">Could not read the address file:
+{error}</text>
+  <text key="dialog.choose_port_file">Select Port File</text>
+  <text key="dialog.port_file_filter">Port files (*.txt *.csv);;Text files (*.txt);;CSV files (*.csv)</text>
+  <text key="dialog.port_file_failed">Port file error</text>
+  <text key="dialog.port_file_required">Select a port file to import.</text>
+  <text key="dialog.port_file_unsupported">Only .txt and .csv files are supported.</text>
+  <text key="dialog.port_file_no_column">No port column was found in the CSV file.</text>
+  <text key="dialog.port_file_empty">No valid ports in the 0-65535 range were found in the port file.</text>
+  <text key="dialog.port_file_read_failed">Could not read the port file:
+{error}</text>
   <text key="dialog.script_unavailable">The selected script is unavailable. Select a script from the script folder.</text>
   <text key="dialog.rustscan_missing">rustscan.exe was not found. Make sure bin/rustscan.exe exists.</text>
   <text key="dialog.cannot_access_scan_dir">Could not access the scan folder:
@@ -142,6 +182,9 @@ Result file: {path}</text>
   <text key="dialog.scan_start_failed">Failed to start scan</text>
   <text key="dialog.cannot_start_rustscan">Could not start RustScan:
 {error}</text>
+  <text key="dialog.csv_export_failed">CSV export failed</text>
+  <text key="dialog.cannot_write_csv">Could not write the CSV file:
+{error}</text>
   <text key="dialog.rename">Rename</text>
   <text key="dialog.new_name">New name:</text>
   <text key="dialog.invalid_name">Invalid name</text>
@@ -156,6 +199,9 @@ Result file: {path}</text>
   <text key="dialog.confirm">Confirm</text>
   <text key="dialog.delete_failed">Delete failed</text>
   <text key="dialog.cannot_delete_folder">Could not delete the folder:
+{error}</text>
+  <text key="dialog.delete_script_body">Delete script “{name}”? The local script file will also be removed.</text>
+  <text key="dialog.cannot_delete_script">Could not delete the script:
 {error}</text>
   <text key="dialog.open_failed">Open failed</text>
   <text key="dialog.cannot_access_folder">Could not create or access the folder:

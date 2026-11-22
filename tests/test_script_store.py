@@ -34,6 +34,14 @@ class ScriptStoreTests(unittest.TestCase):
         with self.assertRaises(ScriptExistsError):
             self.store.write_script("demo.nse", "other")
 
+    def test_delete_script_removes_local_file(self) -> None:
+        self.store.write_script("demo.nse", "print('hello')")
+
+        self.store.delete_script("demo.nse")
+
+        self.assertFalse((self.store.root / "demo.nse").exists())
+        self.assertEqual(self.store.list_scripts(), [])
+
     def test_invalid_script_names_are_rejected(self) -> None:
         for name in ("", "..", "../escape", "bad/name", "CON"):
             with self.subTest(name=name):

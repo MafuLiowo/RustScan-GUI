@@ -77,6 +77,28 @@ class ResultStoreTests(unittest.TestCase):
         self.assertIsNotNone(documents[0].error)
         self.assertEqual(documents[0].results, [])
 
+    def test_job_count_and_legacy_localized_target_are_loaded(self) -> None:
+        save_results(
+            self.scan_dir,
+            [PortResult("127.0.0.1", "80", "tcp", "open", "http", "")],
+            target="many targets",
+            job_count=4,
+            filename="new.xml",
+        )
+        (self.scan_dir / "legacy.xml").write_text(
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<scan_results target="4 组扫描任务">'
+            '<result address="127.0.0.1" port="80" protocol="tcp" '
+            'state="open" service="http" version="" />'
+            "</scan_results>",
+            encoding="utf-8",
+        )
+
+        documents = {document.path.name: document for document in load_result_documents(self.scan_dir)}
+
+        self.assertEqual(documents["new.xml"].job_count, 4)
+        self.assertEqual(documents["legacy.xml"].job_count, 4)
+
     def test_missing_scan_directory_returns_empty(self) -> None:
         self.assertEqual(load_result_documents(self.scan_dir / "missing"), [])
 

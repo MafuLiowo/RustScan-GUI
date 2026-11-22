@@ -21,8 +21,11 @@ class ScanInfoStoreTests(unittest.TestCase):
     def test_save_and_load_round_trip(self) -> None:
         values = {
             "address": "192.168.1.0/24",
+            "address_file_mode": True,
+            "address_file": "C:/targets.csv",
             "mode": "range",
             "ports": "1-2048",
+            "attack_type": "pitchfork",
             "exclude_ip_mode": True,
             "exclude_ips": "192.168.1.9",
             "exclude_mode": True,
@@ -49,6 +52,33 @@ class ScanInfoStoreTests(unittest.TestCase):
         )
 
         self.assertEqual(load_scan_form(self.scan_dir), {})
+
+    def test_file_port_mode_and_attack_type_round_trip(self) -> None:
+        values = {
+            "address": "",
+            "address_file_mode": True,
+            "address_file": "C:/targets.csv",
+            "mode": "file",
+            "ports": "C:/targets.csv",
+            "attack_type": "pitchfork",
+            "exclude_ip_mode": False,
+            "exclude_ips": "",
+            "exclude_mode": False,
+            "exclude_ports": "",
+            "ignore_config": False,
+            "udp_mode": False,
+            "use_nmap": False,
+            "nmap_extra_args": "",
+            "use_script": False,
+            "script_name": "",
+        }
+
+        save_scan_form(self.scan_dir, values)
+        loaded = load_scan_form(self.scan_dir)
+
+        self.assertEqual(loaded["mode"], "file")
+        self.assertEqual(loaded["ports"], "C:/targets.csv")
+        self.assertEqual(loaded["attack_type"], "pitchfork")
 
 
 if __name__ == "__main__":
