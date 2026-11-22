@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from core.output_parser import parse_rustscan_output
+from core.output_parser import parse_open_port_line, parse_rustscan_output
 
 
 class OutputParserTests(unittest.TestCase):
@@ -33,6 +33,18 @@ class OutputParserTests(unittest.TestCase):
 
         self.assertEqual([item.port for item in results], ["53", "161"])
         self.assertTrue(all(item.protocol == "udp" for item in results))
+
+    def test_parses_single_open_port_line_with_ansi_color(self) -> None:
+        result = parse_open_port_line(
+            "\x1b[32mOpen 192.168.36.128:2377\x1b[0m",
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.168.36.128")
+        self.assertEqual(result.port, "2377")
+        self.assertEqual(result.protocol, "tcp")
+        self.assertEqual(result.state, "open")
+        self.assertIsNone(parse_open_port_line("Starting Nmap"))
 
     def test_parses_nmap_service_version_and_merges_port_only_result(self) -> None:
         output = (

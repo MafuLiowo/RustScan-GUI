@@ -66,6 +66,7 @@
   <text key="scan.nmap_extra_args_placeholder">Additional Nmap scan arguments</text>
   <text key="scan.use_script_label">Use a script?</text>
   <text key="scan.no_scripts_available">No scripts available in the script folder</text>
+  <text key="scan.file_import_mode_tip">Pitchfork and Sniper modes are available only when both the address and ports are imported from files.</text>
   <text key="scan.tip">Results are saved in the current scan folder and displayed from XML files.</text>
   <text key="scan.start">Start Scan</text>
 

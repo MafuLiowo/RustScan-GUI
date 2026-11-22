@@ -66,6 +66,7 @@
   <text key="scan.nmap_extra_args_placeholder">额外的Nmap扫描参数</text>
   <text key="scan.use_script_label">是否使用脚本</text>
   <text key="scan.no_scripts_available">script 文件夹中没有可用脚本</text>
+  <text key="scan.file_import_mode_tip">Pitchfork与Sniper模式仅在地址与端口都为文件导入时可供选择</text>
   <text key="scan.tip">扫描结果会保存在当前扫描文件夹中，并以 XML 格式读取展示。</text>
   <text key="scan.start">开始扫描</text>
 
